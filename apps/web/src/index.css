@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Manrope", ui-sans-serif, system-ui, sans-serif;
+
+  /* Rivo Indigo — primary brand */
+  --color-rivo-50: #f2f0ff;
+  --color-rivo-100: #e6e2fe;
+  --color-rivo-200: #cec5fd;
+  --color-rivo-300: #ac9cfb;
+  --color-rivo-400: #8b72f7;
+  --color-rivo-500: #6c4ef2;
+  --color-rivo-600: #5b3fe0;
+  --color-rivo-700: #4a30bf;
+  --color-rivo-800: #3a2694;
+  --color-rivo-900: #2c1d70;
+  --color-rivo-950: #191147;
+
+  /* Rivo Gold — price / CTA accent */
+  --color-gold-50: #fff9ec;
+  --color-gold-100: #fff0cc;
+  --color-gold-200: #ffe098;
+  --color-gold-300: #ffca5c;
+  --color-gold-400: #ffb02e;
+  --color-gold-500: #fa9814;
+  --color-gold-600: #de770a;
+  --color-gold-700: #b8580c;
+  --color-gold-800: #944511;
+  --color-gold-900: #793a12;
+
+  /* Ink — dark surfaces */
+  --color-ink-950: #06070a;
+  --color-ink-900: #0b0d12;
+  --color-ink-800: #12141c;
+  --color-ink-700: #1a1d28;
+  --color-ink-600: #262a3a;
+  --color-ink-500: #383e54;
+
+  /* Status */
+  --color-success-500: #1fb463;
+  --color-success-600: #16994f;
+  --color-danger-500: #e5484d;
+  --color-danger-600: #d13438;
+  --color-warning-500: #f5a623;
+
+  --shadow-rivo-sm: 0 1px 2px 0 rgb(11 13 18 / 0.06);
+  --shadow-rivo-md: 0 6px 20px -4px rgb(11 13 18 / 0.12), 0 2px 6px -2px rgb(11 13 18 / 0.08);
+  --shadow-rivo-lg: 0 20px 45px -12px rgb(11 13 18 / 0.28);
+  --shadow-rivo-glow: 0 0 0 1px rgb(108 78 242 / 0.15), 0 12px 32px -8px rgb(108 78 242 / 0.35);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background-color: #f6f5fb;
+    color: var(--color-ink-900);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+}
