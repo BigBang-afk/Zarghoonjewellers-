@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 .env
+*.apk
+*.aab
 
 # Editor directories and files
 .vscode/*

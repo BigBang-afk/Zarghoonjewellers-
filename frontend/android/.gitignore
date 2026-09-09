@@ -1,0 +1,13 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+build/
+captures/
+.externalNativeBuild
+.cxx
+
+# Web assets are synced from ../dist via `npx cap sync android` — regenerate
+# rather than commit, to avoid duplicating the frontend build output.
+app/src/main/assets/public
