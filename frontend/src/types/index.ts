@@ -1,0 +1,163 @@
+// Shared frontend types mirroring backend DTOs (backend/src/types/enums.ts,
+// backend/docs/09-api-architecture.md). Kept intentionally loose (many
+// `unknown`/optional fields) since this consumes a real but evolving API —
+// only the fields the UI actually reads are typed strictly.
+
+export type UserRole = "passenger" | "driver" | "admin"
+
+export interface PublicUser {
+  id: string
+  fullName: string
+  phone: string
+  email: string | null
+  role: UserRole
+  status: string
+  photoUrl: string | null
+}
+
+export interface VehicleType {
+  id: string
+  code: "bike" | "rickshaw" | "economy" | "standard" | "premium"
+  name: string
+  capacity: number
+}
+
+export interface City {
+  id: string
+  name: string
+  status: string
+  currencyCode: string
+}
+
+export interface FareEstimate {
+  route: { distanceKm: number; durationMin: number }
+  fare: {
+    baseFare: number
+    distanceCharge: number
+    durationCharge: number
+    subtotal: number
+    demandMultiplier: number
+    suggestedFare: number
+    minimumFare: number
+    maximumFare: number | null
+    commissionRate: number
+  }
+}
+
+export type BookingMode = "quick_match" | "competitive_offer"
+
+export interface RideRequestDispatch {
+  status: "dispatched" | "no_drivers" | "skipped"
+  driverId?: string
+  offerId?: string
+  driversNotified?: number
+}
+
+export interface CreateRideRequestResult {
+  request: { id: string; status: string; proposedFare: number; suggestedFare: number }
+  fare: FareEstimate["fare"]
+  route: FareEstimate["route"]
+  dispatch: RideRequestDispatch
+}
+
+export interface DriverOfferSummary {
+  id: string
+  status: string
+  offerPrice: number
+  etaMin: number
+  distanceKm: number
+  expiresAt: string
+  driver: {
+    id: string
+    name: string
+    photoUrl: string | null
+    rating: number
+    completedRides: number
+    cancellationRate: number
+    verified: boolean
+  }
+  vehicle: { model: string; color: string | null; plateNumber: string }
+  counterOffer: { id: string; counterPrice: number; expiresAt: string } | null
+}
+
+export interface IncomingRequestSummary {
+  id: string // offer id
+  rideRequestId: string
+  bookingMode: BookingMode
+  pickup: string
+  destination: string
+  distanceKm: number
+  etaMin: number
+  offerPrice: number
+  paymentMethod: string
+  expiresAt: string
+  passenger: { name: string; rating: number }
+}
+
+export type RideStatus =
+  | "driver_selected"
+  | "driver_arriving"
+  | "driver_arrived"
+  | "ride_started"
+  | "ride_completed"
+  | "cancelled_by_passenger"
+  | "cancelled_by_driver"
+  | "expired"
+  | "disputed"
+
+export interface RideSummary {
+  id: string
+  status: RideStatus
+  agreedFare: number
+  finalFare: number | null
+  distanceKm: number | null
+  durationMin: number | null
+  paymentMethod: string
+  shareToken: string | null
+  passenger: { userId: string; user: PublicUser }
+  driver: { userId: string; user: PublicUser; ratingAvg?: number }
+  vehicle: { make: string; model: string; color: string | null; plateNumber: string }
+  pickup: { address: string; lat: number; lng: number }
+  destination: { address: string; lat: number; lng: number }
+  createdAt: string
+}
+
+export interface NotificationItem {
+  id: string
+  type: string
+  title: string
+  body: string | null
+  read: boolean
+  createdAt: string
+  data?: Record<string, unknown> | null
+}
+
+export interface DriverEarningsSummary {
+  walletBalanceRs: number
+  today: { totalRs: number; rides: number; averageFareRs: number }
+  week: { totalRs: number; rides: number; averageFareRs: number }
+  month: { totalRs: number; rides: number; averageFareRs: number }
+  completedRides: number
+  acceptanceRate: number
+  rating: number
+}
+
+export interface AdminKpis {
+  totalPassengers: number
+  activePassengers: number
+  totalDrivers: number
+  onlineDrivers: number
+  ridesRequestedToday: number
+  completedToday: number
+  cancelledToday: number
+  activeRides: number
+  grossBookingValueRs: number
+  platformRevenueRs: number
+  driverEarningsRs: number
+  avgFareRs: number
+  avgDurationMin: number
+  driverCancellationRatePct: number
+  passengerCancellationRatePct: number
+  repeatPassengerRatePct: number
+  pendingDriverVerifications: number
+}

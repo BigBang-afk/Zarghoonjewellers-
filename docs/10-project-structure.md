@@ -58,51 +58,70 @@ rivo/
 └── README.md
 ```
 
-## Phase 1 actual layout (what exists in this repo today)
+## Actual layout (Phase 1 + Phase 2, what exists in this repo today)
 
-Phase 1 intentionally does **not** stand up the full monorepo above — that
-would be premature structure for four static screens. Instead:
+Phase 1 intentionally did not stand up the full monorepo above — that would
+have been premature structure for four static screens. Phase 2 introduced a
+real `/backend`, and renamed `apps/web` to `/frontend` per the requested
+`/frontend /backend` top-level split — still one deployable per side rather
+than the fully split `apps/*` + `services/*` + `packages/*` target above,
+since a single Express app and a single Vite app are still the right size
+for what's built so far.
 
 ```
 Zarghoonjewellers-/
-├── docs/                        # all 11 architecture documents (this set)
-└── apps/
-    └── web/                     # single Vite + React + TypeScript + Tailwind app
-        ├── src/
-        │   ├── components/
-        │   │   ├── ui/           # Button, Card, Badge, MapCanvas (shared primitives)
-        │   │   ├── Logo.tsx
-        │   │   └── VehicleIcon.tsx
-        │   ├── data/
-        │   │   └── mock.ts       # realistic static demo data — no live backend
-        │   ├── pages/
-        │   │   ├── Landing.tsx
-        │   │   ├── CustomerHome.tsx
-        │   │   ├── DriverHome.tsx
-        │   │   └── AdminDashboard.tsx
-        │   ├── App.tsx            # router + Phase 1 preview switcher
-        │   ├── main.tsx
-        │   └── index.css          # design tokens (Tailwind v4 @theme)
-        ├── index.html
-        ├── package.json
-        └── vite.config.ts
+├── docs/                        # all architecture + Phase 2 completion report
+├── backend/                     # Node.js + TypeScript + Express + Prisma + Socket.IO
+│   ├── prisma/
+│   │   ├── schema.prisma        # implements docs/08's entity model (+ auth support tables)
+│   │   ├── migrations/
+│   │   └── seed.ts              # demo data — see docs/12 §9 for test accounts
+│   ├── src/
+│   │   ├── api/                 # routers, one folder per domain
+│   │   │   ├── auth/  passenger/  driver/  rides/  admin/  safety/  notifications/  public/
+│   │   ├── services/             # business logic — see docs/12 §1 for the full list
+│   │   │   ├── maps/  payments/  notifications/  otp/
+│   │   │   ├── fareEngine.ts  matchingEngine.ts  negotiationEngine.ts
+│   │   │   ├── bookingService.ts  rideLifecycleService.ts  ratingService.ts
+│   │   │   └── rideRequestService.ts
+│   │   ├── middleware/           # auth, validate, errorHandler, rateLimit
+│   │   ├── realtime/socket.ts    # Socket.IO gateway
+│   │   ├── config/               # env.ts, settings.ts (admin-configurable values)
+│   │   ├── types/enums.ts
+│   │   ├── shared/  utils/
+│   │   ├── app.ts  server.ts
+│   │   └── ...
+│   └── tests/                    # Vitest + Supertest, real ephemeral DB
+├── frontend/                     # Vite + React + TypeScript + Tailwind
+│   └── src/
+│       ├── api/                  # typed client per domain (auth, rides, driver, admin, ...)
+│       ├── auth/                 # AuthContext, ProtectedRoute, tokenStore
+│       ├── services/socket.ts    # Socket.IO client
+│       ├── components/ui/        # Button, Card, Badge, MapCanvas, Input, States
+│       ├── pages/
+│       │   ├── auth/  passenger/  driver/  admin/
+│       │   └── Landing.tsx
+│       ├── shared/  types/  config/
+│       └── App.tsx               # router + auth/toast providers
+└── README.md
 ```
 
-`apps/web` plays the role of `marketing-web` + a single-screen preview of
-`customer-mobile`, `driver-mobile`, and `admin-web` — one deployable, four
-routes (`/`, `/app`, `/driver`, `/admin`), sharing one component library and
-one token set. When Phase 2 splits the customer/driver experiences into
-dedicated React Native apps, `src/components/ui` and `src/data` graduate into
-the `packages/ui-web` (or `ui-native`) and `packages/domain-types` shown
-above with minimal rework, since they were already written as
-framework-agnostic-in-spirit, prop-driven components against typed mock data
-shaped like the real API responses in
-[09 — API Architecture](./09-api-architecture.md).
+`frontend` plays the role of `marketing-web` + a single-screen-per-role
+preview of `customer-mobile`, `driver-mobile`, and `admin-web` — one
+deployable, routes for `/`, `/login`, `/register/*`, `/app`, `/driver`,
+`/admin`. `backend` plays the role of every `services/*` box in the target
+layout, collapsed into one deployable (a modular monolith, exactly as
+[06 — Technical Architecture](./06-technical-architecture.md) §1 anticipated:
+"services are logically separated... but Phase 1/2 can ship as a modular
+monolith... splitting into physically separate services is a scaling
+decision, not a day-one requirement").
 
-## Why not scaffold the full monorepo now
+## Why not fully split into the target layout yet
 
-Standing up 13 empty service directories and 5 empty packages with no code
-in them would be structure without substance — it doesn't help build the
-four required screens and would need to be re-shaped once real service
-boundaries are proven. The target layout above is the destination, recorded
-now so Phase 2+ work lands in the right place from the start.
+Splitting `backend/src/services/*` into physically separate deployables, or
+`frontend` into three React Native/web apps, would be premature: there's
+one traffic pattern and one team-of-one so far, and the service boundaries
+inside `backend/src/services/` are already drawn along the lines the target
+layout names (`fareEngine`, `matchingEngine`, `negotiationEngine`, `maps/`,
+`payments/`, `notifications/`) — so the split, when warranted, is a lift-and
+-shift of existing modules rather than a redesign.

@@ -1,0 +1,844 @@
+// =====================================================================
+// RIVO — Phase 2 Prisma schema
+//
+// Implements the Phase 1 entity model (docs/08-database-schema.sql) as a
+// runnable application schema. Two portability notes vs. the canonical
+// Postgres SQL doc, both driven by the SQLite dev database used to keep
+// this project runnable with zero external infra:
+//
+//   1. Enums are modeled as `String` with the allowed values documented
+//      in comments and enforced by the Zod schemas in src/types — SQLite
+//      has no native enum type. Swapping `provider = "postgresql"` below
+//      lets these become real Postgres enums later with a small migration.
+//   2. Money/numeric fields use `Float` — SQLite has no Decimal type.
+//      Swap to `Decimal` on Postgres for exact precision in production.
+//
+// Run `npx prisma migrate dev` in backend/ to create the local dev.db.
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------
+// Geography
+// ---------------------------------------------------------------------
+
+model Country {
+  id                    String   @id @default(uuid())
+  name                  String
+  isoCode               String   @unique
+  defaultCurrencyCode   String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  cities                City[]
+
+  @@map("countries")
+}
+
+/// status: planned | launching | live | paused
+model City {
+  id              String   @id @default(uuid())
+  countryId       String
+  name            String
+  status          String   @default("planned")
+  currencyCode    String
+  timezone        String
+  centerLat       Float?
+  centerLng       Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  country         Country  @relation(fields: [countryId], references: [id])
+  serviceZones    ServiceZone[]
+  users           User[]
+  driverProfiles  DriverProfile[]
+  fareRules       FareRule[]
+  rideRequests    RideRequest[]
+  cityVehicleTypes CityVehicleType[]
+  promotions      Promotion[]
+
+  @@unique([countryId, name])
+  @@index([status])
+  @@map("cities")
+}
+
+model ServiceZone {
+  id              String   @id @default(uuid())
+  cityId          String
+  name            String
+  boundaryGeoJson String   // JSON-encoded polygon
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  city            City     @relation(fields: [cityId], references: [id])
+  rideRequests    RideRequest[]
+  fareRules       FareRule[]
+
+  @@unique([cityId, name])
+  @@map("service_zones")
+}
+
+// ---------------------------------------------------------------------
+// Vehicle types (data-driven)
+// ---------------------------------------------------------------------
+
+model VehicleType {
+  id          String   @id @default(uuid())
+  code        String   @unique // bike | rickshaw | economy | standard | premium
+  name        String
+  capacity    Int      @default(4)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vehicles       Vehicle[]
+  fareRules      FareRule[]
+  rideRequests   RideRequest[]
+  cityVehicleTypes CityVehicleType[]
+
+  @@map("vehicle_types")
+}
+
+model CityVehicleType {
+  cityId        String
+  vehicleTypeId String
+  isActive      Boolean @default(true)
+
+  city          City        @relation(fields: [cityId], references: [id])
+  vehicleType   VehicleType @relation(fields: [vehicleTypeId], references: [id])
+
+  @@id([cityId, vehicleTypeId])
+  @@map("city_vehicle_types")
+}
+
+// ---------------------------------------------------------------------
+// Users & profiles
+// ---------------------------------------------------------------------
+
+/// role: passenger | driver | admin
+/// status: active | suspended | banned | pending_verification
+model User {
+  id                String   @id @default(uuid())
+  phone             String   @unique
+  email             String?  @unique
+  passwordHash      String?
+  fullName          String
+  photoUrl          String?
+  role              String
+  status            String   @default("pending_verification")
+  primaryCityId     String?
+  locale            String   @default("en")
+  phoneVerifiedAt   DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+
+  primaryCity       City?    @relation(fields: [primaryCityId], references: [id])
+  passengerProfile  PassengerProfile?
+  driverProfile     DriverProfile?
+  adminProfile      AdminUser?
+  locations         Location[]
+  notifications     Notification[]
+  sentMessages      Message[]
+  supportTickets    SupportTicket[] @relation("TicketAuthor")
+  assignedTickets   SupportTicket[] @relation("TicketAssignee")
+  safetyEvents      SafetyEvent[]
+  wallet            Wallet?
+  refreshTokens     RefreshToken[]
+  otpCodes          OtpCode[]
+  reviewedDriverDocs DriverDocument[] @relation("DocReviewer")
+  reviewedVehicleDocs VehicleDocument[] @relation("VehicleDocReviewer")
+  raisedDisputes    Dispute[] @relation("DisputeRaisedBy")
+  resolvedDisputes  Dispute[] @relation("DisputeResolvedBy")
+  ratingsGiven      Rating[] @relation("RatingRater")
+  ratingsReceived   Rating[] @relation("RatingRatee")
+  createdPromotions Promotion[]
+  statusChanges     RideStatusHistory[]
+
+  @@index([role, status])
+  @@map("users")
+}
+
+model PassengerProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  completedRides  Int      @default(0)
+  cancelledRides  Int      @default(0)
+  ratingAvg       Float    @default(5.0)
+  ratingCount     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id])
+  rideRequests    RideRequest[]
+  rides           Ride[]
+
+  @@map("passenger_profiles")
+}
+
+/// verificationStatus: pending | approved | rejected | expired
+/// availabilityStatus: offline | online | on_trip
+model DriverProfile {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  cityId              String
+  verificationStatus  String   @default("pending")
+  availabilityStatus  String   @default("offline")
+  licenseNumber       String?
+  licenseExpiry       DateTime?
+  completedRides      Int      @default(0)
+  cancelledRides      Int      @default(0)
+  ratingAvg           Float    @default(5.0)
+  ratingCount         Int      @default(0)
+  acceptanceRate      Float    @default(100.0)
+  cancellationRate    Float    @default(0.0)
+  lastLat             Float?
+  lastLng             Float?
+  lastLocationAt      DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  deletedAt           DateTime?
+
+  user                User     @relation(fields: [userId], references: [id])
+  city                City     @relation(fields: [cityId], references: [id])
+  documents           DriverDocument[]
+  vehicles            Vehicle[]
+  rideOffers          RideOffer[]
+  rides               Ride[]
+
+  @@index([cityId, availabilityStatus])
+  @@index([verificationStatus])
+  @@map("driver_profiles")
+}
+
+/// docType: national_id | driving_license | vehicle_registration | insurance | route_permit | profile_photo
+/// status: pending | approved | rejected | expired
+model DriverDocument {
+  id                String   @id @default(uuid())
+  driverId          String
+  docType           String
+  fileUrl           String
+  status            String   @default("pending")
+  reviewedById      String?
+  reviewedAt        DateTime?
+  rejectionReason   String?
+  expiresAt         DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  driver            DriverProfile @relation(fields: [driverId], references: [id])
+  reviewedBy        User?    @relation("DocReviewer", fields: [reviewedById], references: [id])
+
+  @@index([driverId])
+  @@index([status])
+  @@map("driver_documents")
+}
+
+// ---------------------------------------------------------------------
+// Vehicles
+// ---------------------------------------------------------------------
+
+/// status: pending | active | inactive | rejected
+model Vehicle {
+  id              String   @id @default(uuid())
+  driverId        String
+  vehicleTypeId   String
+  make            String
+  model           String
+  year            Int?
+  color           String?
+  plateNumber     String   @unique
+  status          String   @default("pending")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  driver          DriverProfile @relation(fields: [driverId], references: [id])
+  vehicleType     VehicleType   @relation(fields: [vehicleTypeId], references: [id])
+  documents       VehicleDocument[]
+  rideOffers      RideOffer[]
+  rides           Ride[]
+
+  @@index([driverId])
+  @@map("vehicles")
+}
+
+model VehicleDocument {
+  id              String   @id @default(uuid())
+  vehicleId       String
+  docType         String
+  fileUrl         String
+  status          String   @default("pending")
+  reviewedById    String?
+  reviewedAt      DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vehicle         Vehicle  @relation(fields: [vehicleId], references: [id])
+  reviewedBy      User?    @relation("VehicleDocReviewer", fields: [reviewedById], references: [id])
+
+  @@index([vehicleId])
+  @@map("vehicle_documents")
+}
+
+// ---------------------------------------------------------------------
+// Locations
+// ---------------------------------------------------------------------
+
+model Location {
+  id          String   @id @default(uuid())
+  userId      String?
+  label       String?
+  address     String
+  lat         Float
+  lng         Float
+  isSaved     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  user        User?    @relation(fields: [userId], references: [id])
+  pickupFor       RideRequest[] @relation("RequestPickup")
+  destinationFor  RideRequest[] @relation("RequestDestination")
+  ridePickupFor      Ride[] @relation("RidePickup")
+  rideDestinationFor Ride[] @relation("RideDestination")
+
+  @@index([userId])
+  @@map("locations")
+}
+
+// ---------------------------------------------------------------------
+// Fare engine configuration
+// ---------------------------------------------------------------------
+
+model FareRule {
+  id                    String   @id @default(uuid())
+  cityId                String
+  zoneId                String?
+  vehicleTypeId         String
+  baseFare              Float
+  perKmRate             Float
+  perMinRate            Float
+  minimumFare           Float
+  maximumFare           Float?
+  commissionRate        Float    // e.g. 0.15 = 15%
+  surgeMinMultiplier    Float    @default(1.0)
+  surgeMaxMultiplier    Float    @default(2.5)
+  isActive              Boolean  @default(true)
+  effectiveFrom         DateTime @default(now())
+  effectiveTo           DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  city        City         @relation(fields: [cityId], references: [id])
+  zone        ServiceZone? @relation(fields: [zoneId], references: [id])
+  vehicleType VehicleType  @relation(fields: [vehicleTypeId], references: [id])
+
+  @@index([cityId, vehicleTypeId, zoneId])
+  @@map("fare_rules")
+}
+
+/// Admin-configurable platform settings (matching radius, offer expiry, etc.)
+/// — the enforcement point for "do not hard-code these values".
+model PlatformSetting {
+  key         String   @id
+  value       String   // JSON-encoded value
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("platform_settings")
+}
+
+// ---------------------------------------------------------------------
+// Ride requests, offers, counter-offers — the marketplace core
+// ---------------------------------------------------------------------
+
+/// bookingMode: quick_match | competitive_offer
+/// status: searching | offers_open | matched | expired | cancelled
+model RideRequest {
+  id                        String   @id @default(uuid())
+  passengerId                String
+  cityId                     String
+  zoneId                     String?
+  vehicleTypeId               String
+  pickupLocationId            String
+  destinationLocationId       String
+  bookingMode                 String
+  suggestedFare                Float
+  proposedFare                 Float
+  distanceKm                  Float?
+  estDurationMin                Int?
+  paymentMethod                String   @default("cash")
+  status                        String   @default("searching")
+  searchRadiusKm                Float    @default(5)
+  expiresAt                     DateTime
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+
+  passenger    PassengerProfile @relation(fields: [passengerId], references: [id])
+  city         City             @relation(fields: [cityId], references: [id])
+  zone         ServiceZone?     @relation(fields: [zoneId], references: [id])
+  vehicleType  VehicleType      @relation(fields: [vehicleTypeId], references: [id])
+  pickup       Location         @relation("RequestPickup", fields: [pickupLocationId], references: [id])
+  destination  Location         @relation("RequestDestination", fields: [destinationLocationId], references: [id])
+  offers       RideOffer[]
+  ride         Ride?
+
+  @@index([passengerId])
+  @@index([cityId, status])
+  @@index([expiresAt])
+  @@map("ride_requests")
+}
+
+/// status: pending | accepted | declined | expired | withdrawn
+model RideOffer {
+  id              String   @id @default(uuid())
+  rideRequestId   String
+  driverId        String
+  vehicleId       String
+  offerPrice      Float
+  etaMin          Int
+  distanceKm      Float
+  status          String   @default("pending")
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  rideRequest     RideRequest   @relation(fields: [rideRequestId], references: [id])
+  driver          DriverProfile @relation(fields: [driverId], references: [id])
+  vehicle         Vehicle       @relation(fields: [vehicleId], references: [id])
+  counterOffers   CounterOffer[]
+  ride            Ride?
+
+  @@unique([rideRequestId, driverId])
+  @@index([rideRequestId, status])
+  @@index([driverId, status])
+  @@map("ride_offers")
+}
+
+/// status: pending | accepted | expired | withdrawn
+model CounterOffer {
+  id              String   @id @default(uuid())
+  rideOfferId     String
+  counterPrice    Float
+  status          String   @default("pending")
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  rideOffer       RideOffer @relation(fields: [rideOfferId], references: [id])
+
+  @@index([rideOfferId, status])
+  @@index([expiresAt])
+  @@map("counter_offers")
+}
+
+// ---------------------------------------------------------------------
+// Rides
+// ---------------------------------------------------------------------
+
+/// status: driver_selected | driver_arriving | driver_arrived | ride_started |
+///         ride_completed | cancelled_by_passenger | cancelled_by_driver |
+///         expired | disputed
+model Ride {
+  id                        String   @id @default(uuid())
+  rideRequestId              String   @unique
+  rideOfferId                 String?  @unique
+  passengerId                  String
+  driverId                     String
+  vehicleId                    String
+  pickupLocationId              String
+  destinationLocationId         String
+  agreedFare                    Float    // fare locked in at booking time
+  finalFare                     Float?
+  distanceKm                    Float?
+  durationMin                   Int?
+  paymentMethod                  String   @default("cash")
+  status                         String   @default("driver_selected")
+  shareToken                     String?  @unique
+  acceptedAt                     DateTime @default(now())
+  arrivedAt                      DateTime?
+  startedAt                      DateTime?
+  completedAt                    DateTime?
+  cancelledAt                    DateTime?
+  cancellationReason              String?
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+
+  rideRequest   RideRequest      @relation(fields: [rideRequestId], references: [id])
+  rideOffer     RideOffer?       @relation(fields: [rideOfferId], references: [id])
+  passenger     PassengerProfile @relation(fields: [passengerId], references: [id])
+  driver        DriverProfile    @relation(fields: [driverId], references: [id])
+  vehicle       Vehicle          @relation(fields: [vehicleId], references: [id])
+  pickup        Location         @relation("RidePickup", fields: [pickupLocationId], references: [id])
+  destination   Location         @relation("RideDestination", fields: [destinationLocationId], references: [id])
+
+  locations     RideLocation[]
+  statusHistory RideStatusHistory[]
+  messages      Message[]
+  payment       Payment?
+  ratings       Rating[]
+  safetyEvents  SafetyEvent[]
+  disputes      Dispute[]
+  supportTickets SupportTicket[]
+
+  @@index([passengerId, status])
+  @@index([driverId, status])
+  @@index([status])
+  @@map("rides")
+}
+
+model RideLocation {
+  id          Int      @id @default(autoincrement())
+  rideId      String
+  lat         Float
+  lng         Float
+  heading     Float?
+  speedKmh    Float?
+  recordedAt  DateTime @default(now())
+
+  ride        Ride     @relation(fields: [rideId], references: [id])
+
+  @@index([rideId, recordedAt])
+  @@map("ride_locations")
+}
+
+model RideStatusHistory {
+  id          Int      @id @default(autoincrement())
+  rideId      String
+  status      String
+  changedById String?
+  note        String?
+  changedAt   DateTime @default(now())
+
+  ride        Ride     @relation(fields: [rideId], references: [id])
+  changedBy   User?    @relation(fields: [changedById], references: [id])
+
+  @@index([rideId, changedAt])
+  @@map("ride_status_history")
+}
+
+// ---------------------------------------------------------------------
+// Payments, wallets, transactions, commissions, promotions
+// ---------------------------------------------------------------------
+
+/// discountType: percentage | flat
+model Promotion {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  description     String?
+  discountType    String
+  discountValue   Float
+  maxDiscount     Float?
+  cityId          String?
+  usageLimit      Int?
+  usageCount      Int      @default(0)
+  startsAt        DateTime @default(now())
+  expiresAt       DateTime?
+  isActive        Boolean  @default(true)
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  city            City?    @relation(fields: [cityId], references: [id])
+  createdBy       User?    @relation(fields: [createdById], references: [id])
+  payments        Payment[]
+
+  @@index([isActive, expiresAt])
+  @@map("promotions")
+}
+
+/// method: cash | card | wallet | local_provider
+/// status: pending | authorized | captured | failed | refunded
+model Payment {
+  id                  String   @id @default(uuid())
+  rideId              String   @unique
+  promotionId         String?
+  method              String
+  status              String   @default("pending")
+  amount              Float
+  discountAmount      Float    @default(0)
+  currencyCode        String
+  providerReference   String?
+  capturedAt          DateTime?
+  refundedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  ride                Ride     @relation(fields: [rideId], references: [id])
+  promotion           Promotion? @relation(fields: [promotionId], references: [id])
+  commission          Commission?
+  transactions        Transaction[]
+
+  @@index([status])
+  @@map("payments")
+}
+
+model Commission {
+  id          String   @id @default(uuid())
+  paymentId   String   @unique
+  rate        Float
+  amount      Float
+  createdAt   DateTime @default(now())
+
+  payment     Payment  @relation(fields: [paymentId], references: [id])
+
+  @@map("commissions")
+}
+
+model Wallet {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  balance         Float    @default(0)
+  currencyCode    String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id])
+  transactions    Transaction[]
+
+  @@map("wallets")
+}
+
+/// type: ride_charge | ride_payout | commission | wallet_topup | withdrawal | promo_credit | adjustment | refund
+model Transaction {
+  id              String   @id @default(uuid())
+  walletId        String
+  paymentId       String?
+  type            String
+  amount          Float    // signed: positive credit, negative debit
+  balanceAfter    Float
+  description     String?
+  createdAt       DateTime @default(now())
+
+  wallet          Wallet   @relation(fields: [walletId], references: [id])
+  payment         Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([walletId, createdAt])
+  @@map("transactions")
+}
+
+// ---------------------------------------------------------------------
+// Ratings, reviews, messaging, notifications
+// ---------------------------------------------------------------------
+
+model Rating {
+  id          String   @id @default(uuid())
+  rideId      String
+  raterId     String
+  rateeId     String
+  score       Int
+  tags        String?  // JSON-encoded string[]
+  createdAt   DateTime @default(now())
+
+  ride        Ride     @relation(fields: [rideId], references: [id])
+  rater       User     @relation("RatingRater", fields: [raterId], references: [id])
+  ratee       User     @relation("RatingRatee", fields: [rateeId], references: [id])
+  review      Review?
+
+  @@unique([rideId, raterId])
+  @@index([rateeId])
+  @@map("ratings")
+}
+
+model Review {
+  id          String   @id @default(uuid())
+  ratingId    String   @unique
+  comment     String
+  createdAt   DateTime @default(now())
+
+  rating      Rating   @relation(fields: [ratingId], references: [id])
+
+  @@map("reviews")
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  rideId      String
+  senderId    String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  ride        Ride     @relation(fields: [rideId], references: [id])
+  sender      User     @relation(fields: [senderId], references: [id])
+
+  @@index([rideId, createdAt])
+  @@map("messages")
+}
+
+/// type: ride_update | offer_update | promo | system | safety
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  type        String
+  title       String
+  body        String?
+  data        String?  // JSON-encoded payload
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, read, createdAt])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------
+// Support, disputes, safety
+// ---------------------------------------------------------------------
+
+/// status: open | in_progress | resolved | closed
+/// priority: low | medium | high | urgent
+model SupportTicket {
+  id                  String   @id @default(uuid())
+  userId              String
+  rideId              String?
+  subject             String
+  description         String?
+  status              String   @default("open")
+  priority            String   @default("medium")
+  assignedAdminId     String?
+  resolvedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                User     @relation("TicketAuthor", fields: [userId], references: [id])
+  ride                Ride?    @relation(fields: [rideId], references: [id])
+  assignedAdmin       User?    @relation("TicketAssignee", fields: [assignedAdminId], references: [id])
+
+  @@index([status, priority])
+  @@map("support_tickets")
+}
+
+/// status: open | under_review | resolved | rejected
+model Dispute {
+  id              String   @id @default(uuid())
+  rideId          String
+  raisedById      String
+  againstUserId   String?
+  reason          String
+  status          String   @default("open")
+  resolution      String?
+  resolvedById    String?
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  ride            Ride     @relation(fields: [rideId], references: [id])
+  raisedBy        User     @relation("DisputeRaisedBy", fields: [raisedById], references: [id])
+  resolvedBy      User?    @relation("DisputeResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([status])
+  @@index([rideId])
+  @@map("disputes")
+}
+
+/// type: sos | trip_shared | report_filed | suspicious_activity | ride_deviation
+/// severity: low | medium | high | critical
+model SafetyEvent {
+  id          String   @id @default(uuid())
+  rideId      String?
+  userId      String
+  type        String
+  severity    String   @default("medium")
+  details     String?  // JSON-encoded
+  lat         Float?
+  lng         Float?
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  ride        Ride?    @relation(fields: [rideId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([severity, resolvedAt])
+  @@index([rideId])
+  @@map("safety_events")
+}
+
+// ---------------------------------------------------------------------
+// Admin, audit
+// ---------------------------------------------------------------------
+
+/// role: super_admin | ops_manager | support_agent | finance | safety_officer | read_only
+model AdminUser {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  role        String
+  cityScope   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  user        User     @relation(fields: [userId], references: [id])
+  auditLogs   AuditLog[]
+
+  @@map("admin_users")
+}
+
+model AuditLog {
+  id            Int      @id @default(autoincrement())
+  adminId       String
+  action        String
+  targetTable   String
+  targetId      String?
+  beforeState   String?  // JSON-encoded
+  afterState    String?  // JSON-encoded
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  admin         AdminUser @relation(fields: [adminId], references: [id])
+
+  @@index([adminId, createdAt])
+  @@index([targetTable, targetId])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------
+// Auth support (not in the Phase 1 ERD — needed to make auth real)
+// ---------------------------------------------------------------------
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String
+  tokenHash   String   @unique
+  revokedAt   DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+/// Mock OTP store — see src/services/otp. Never used to bypass real
+/// verification in a production build; MOCK_OTP=false disables the
+/// dev-mode code echo in the API response.
+model OtpCode {
+  id          String   @id @default(uuid())
+  userId      String?
+  phone       String
+  code        String
+  purpose     String   // 'registration' | 'login' | 'reset_password'
+  consumedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([phone, purpose])
+  @@map("otp_codes")
+}
