@@ -119,6 +119,16 @@ export interface PlatformSettingsShape {
   // another radius. Must be >= matching.locationStalenessMinutes or it
   // has no effect.
   "matching.expandPoolStalenessMinutes": number
+
+  // Phase 5 §14 — smart cancellation management. Off by default ("no
+  // automatic penalties without configurable policy"): an admin must
+  // explicitly enable penaltyEnabled before any fee is ever charged. Even
+  // when enabled, a cancellation within freeWindowSec of booking, or for
+  // a reason attributable to the other party (see
+  // EXEMPT_*_CANCELLATION_REASONS), is never fee-eligible.
+  "cancellation.penaltyEnabled": boolean
+  "cancellation.freeWindowSec": number
+  "cancellation.passengerFeeAmount": number
 }
 
 const DEFAULTS: PlatformSettingsShape = {
@@ -190,6 +200,10 @@ const DEFAULTS: PlatformSettingsShape = {
   "supplyDemand.yellowMaxRatio": 1.5,
 
   "matching.expandPoolStalenessMinutes": 25,
+
+  "cancellation.penaltyEnabled": false,
+  "cancellation.freeWindowSec": 120,
+  "cancellation.passengerFeeAmount": 50,
 }
 
 const CACHE_TTL_MS = 5_000

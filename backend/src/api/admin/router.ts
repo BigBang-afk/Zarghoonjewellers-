@@ -16,6 +16,7 @@ import { adminPrivacyRouter } from "./privacy.js"
 import { adminPilotModeRouter } from "./pilotMode.js"
 import { adminDriverAcquisitionRouter } from "./driverAcquisition.js"
 import { adminDispatchRouter } from "./dispatch.js"
+import { adminCancellationsRouter } from "./cancellations.js"
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireRole("admin"))
@@ -36,3 +37,4 @@ adminRouter.use(adminPrivacyRouter)
 adminRouter.use(adminPilotModeRouter)
 adminRouter.use(adminDriverAcquisitionRouter)
 adminRouter.use(adminDispatchRouter)
+adminRouter.use(adminCancellationsRouter)

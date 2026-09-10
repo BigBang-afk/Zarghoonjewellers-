@@ -9,6 +9,7 @@ import { recordDriverRideForIncentives } from "./incentiveService.js"
 import { qualifyReferralOnFirstRide } from "./referralService.js"
 import { checkCancellationRiskSignal } from "./riskService.js"
 import { addMoney, subtractMoney, multiplyMoney, roundMoney } from "../utils/money.js"
+import { assertValidCancellationReason, applyCancellationPolicy } from "./cancellationService.js"
 
 async function loadRideWithParties(rideId: string) {
   const ride = await prisma.ride.findUnique({
@@ -24,16 +25,17 @@ async function loadRideWithParties(rideId: string) {
 }
 
 /** Passenger cancels a ride request before it's matched to a driver. */
-export async function cancelRideRequest(rideRequestId: string, passengerProfileId: string) {
+export async function cancelRideRequest(rideRequestId: string, passengerProfileId: string, reasonCode?: string) {
   const request = await prisma.rideRequest.findUnique({ where: { id: rideRequestId } })
   if (!request) throw ApiError.notFound("Ride request not found.")
   if (request.passengerId !== passengerProfileId) throw ApiError.forbidden()
   if (!["searching", "offers_open"].includes(request.status)) {
     throw ApiError.conflict("REQUEST_NOT_CANCELLABLE", "This request can no longer be cancelled — it may already be matched.")
   }
+  assertValidCancellationReason("passenger", reasonCode)
 
   await prisma.$transaction([
-    prisma.rideRequest.update({ where: { id: rideRequestId }, data: { status: "cancelled" } }),
+    prisma.rideRequest.update({ where: { id: rideRequestId }, data: { status: "cancelled", cancellationReasonCode: reasonCode ?? null } }),
     prisma.rideOffer.updateMany({ where: { rideRequestId, status: "pending" }, data: { status: "withdrawn" } }),
   ])
 
@@ -63,6 +65,7 @@ export async function updateRideStatus(params: {
   actorRole: "passenger" | "driver"
   target: RideStatus
   reason?: string
+  reasonCode?: string
 }) {
   const ride = await loadRideWithParties(params.rideId)
 
@@ -80,6 +83,7 @@ export async function updateRideStatus(params: {
     if (!cancellableFrom.includes(current)) {
       throw ApiError.conflict("INVALID_STATUS_TRANSITION", `Ride cannot be cancelled once it has status "${current}".`)
     }
+    assertValidCancellationReason(params.actorRole, params.reasonCode)
   } else if (!allowedNext.includes(params.target)) {
     throw ApiError.conflict("INVALID_STATUS_TRANSITION", `Cannot move ride from "${current}" to "${params.target}".`)
   }
@@ -98,6 +102,7 @@ export async function updateRideStatus(params: {
   if (isCancellation) {
     extra.cancelledAt = now
     extra.cancellationReason = params.reason ?? null
+    extra.cancellationReasonCode = params.reasonCode ?? null
   }
 
   await prisma.$transaction([
@@ -120,6 +125,18 @@ export async function updateRideStatus(params: {
       await checkCancellationRiskSignal(ride.passenger.userId, "passenger")
     } else {
       await checkCancellationRiskSignal(ride.driver.userId, "driver")
+    }
+
+    const policyResult = await applyCancellationPolicy({
+      rideId: ride.id,
+      actorRole: params.actorRole,
+      reasonCode: params.reasonCode ?? null,
+      bookedAt: ride.createdAt,
+      passengerUserId: ride.passenger.userId,
+      driverUserId: ride.driver.userId,
+    })
+    if (policyResult.feeCharged) {
+      await prisma.ride.update({ where: { id: ride.id }, data: { cancellationFeeCharged: true } })
     }
   }
 

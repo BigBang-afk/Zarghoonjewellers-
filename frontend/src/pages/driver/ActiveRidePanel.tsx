@@ -4,6 +4,7 @@ import { MapCanvas, MapPin as Pin, CarMarker } from "../../components/ui/MapCanv
 import { Card } from "../../components/ui/Card"
 import { Badge } from "../../components/ui/Badge"
 import { Button } from "../../components/ui/Button"
+import { CancellationReasonSheet } from "../../components/CancellationReasonSheet"
 import { ridesApi } from "../../api/rides"
 import { getSocket } from "../../services/socket"
 import { useToast, errorMessage } from "../../shared/Toast"
@@ -21,6 +22,7 @@ const NEXT_ACTION: Partial<Record<RideStatus, { target: RideStatus; label: strin
 export function ActiveRidePanel({ rideId, onCompleted }: { rideId: string; onCompleted: (passengerName: string) => void }) {
   const [ride, setRide] = useState<RideSummary | null>(null)
   const [busy, setBusy] = useState(false)
+  const [showReasons, setShowReasons] = useState(false)
   const { push } = useToast()
   const { locale } = useLocale()
 
@@ -48,11 +50,11 @@ export function ActiveRidePanel({ rideId, onCompleted }: { rideId: string; onCom
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rideId])
 
-  async function cancel() {
-    if (!confirm("Cancel this ride? This will count against your cancellation rate.")) return
+  async function cancel(reasonCode: string) {
+    setShowReasons(false)
     setBusy(true)
     try {
-      await ridesApi.updateStatus(rideId, "cancelled_by_driver", "Driver cancelled")
+      await ridesApi.updateStatus(rideId, "cancelled_by_driver", "Driver cancelled", reasonCode)
       push("info", "Ride cancelled.")
     } catch (err) {
       push("error", errorMessage(err))
@@ -123,7 +125,7 @@ export function ActiveRidePanel({ rideId, onCompleted }: { rideId: string; onCom
 
         <div className="mt-4 flex gap-2.5">
           {ride.status !== "ride_started" && (
-            <Button variant="secondary" onClick={cancel} disabled={busy}>Cancel</Button>
+            <Button variant="secondary" onClick={() => setShowReasons(true)} disabled={busy}>Cancel</Button>
           )}
           {action && (
             <Button fullWidth size="lg" icon={<Navigation className="h-4 w-4" />} onClick={advance} disabled={busy}>
@@ -132,6 +134,7 @@ export function ActiveRidePanel({ rideId, onCompleted }: { rideId: string; onCom
           )}
         </div>
       </div>
+      {showReasons && <CancellationReasonSheet role="driver" onSelect={cancel} onClose={() => setShowReasons(false)} />}
     </div>
   )
 }

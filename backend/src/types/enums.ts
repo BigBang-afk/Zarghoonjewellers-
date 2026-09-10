@@ -181,3 +181,39 @@ export type RiskEventType = (typeof RiskEventType)[number]
 
 export const DisputeDecision = ["refund_passenger", "adjust_driver_payout", "no_action"] as const
 export type DisputeDecision = (typeof DisputeDecision)[number]
+
+// ---------------------------------------------------------------------
+// Phase 5 §14 — smart cancellation management. Structured, role-specific
+// reason codes (never free text as the primary signal) so cancellation
+// patterns are actually analyzable, plus a role-aware "exempt" set: a
+// reason attributable to the *other* party (e.g. a passenger cancelling
+// because the driver isn't moving) never triggers a late-cancellation
+// fee, regardless of platform policy — see cancellationService.ts.
+// ---------------------------------------------------------------------
+
+export const PassengerCancellationReason = [
+  "changed_mind",
+  "found_alternative",
+  "driver_too_far",
+  "driver_not_moving",
+  "wrong_pickup_location",
+  "price_too_high",
+  "long_wait",
+  "other",
+] as const
+export type PassengerCancellationReason = (typeof PassengerCancellationReason)[number]
+
+export const DriverCancellationReason = [
+  "passenger_no_show",
+  "passenger_unreachable",
+  "unsafe_pickup_location",
+  "vehicle_issue",
+  "wrong_trip_details",
+  "traffic_or_emergency",
+  "other",
+] as const
+export type DriverCancellationReason = (typeof DriverCancellationReason)[number]
+
+/** Reasons attributable to the other party — never fee-eligible even when a cancellation policy is enabled. */
+export const EXEMPT_PASSENGER_CANCELLATION_REASONS: PassengerCancellationReason[] = ["driver_too_far", "driver_not_moving"]
+export const EXEMPT_DRIVER_CANCELLATION_REASONS: DriverCancellationReason[] = ["unsafe_pickup_location", "vehicle_issue"]

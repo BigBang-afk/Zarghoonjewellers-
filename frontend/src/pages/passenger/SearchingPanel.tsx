@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Loader2, X } from "lucide-react"
 import { Button } from "../../components/ui/Button"
+import { CancellationReasonSheet } from "../../components/CancellationReasonSheet"
 import { ridesApi } from "../../api/rides"
 import { getSocket } from "../../services/socket"
 import { useToast, errorMessage } from "../../shared/Toast"
@@ -17,6 +18,7 @@ export function SearchingPanel({
 }) {
   const { push } = useToast()
   const settled = useRef(false)
+  const [showReasons, setShowReasons] = useState(false)
 
   useEffect(() => {
     settled.current = false
@@ -52,9 +54,11 @@ export function SearchingPanel({
     }
   }, [rideRequestId, onMatched, onCancelled, push])
 
-  async function cancel() {
+  async function cancel(reasonCode: string) {
+    settled.current = true
+    setShowReasons(false)
     try {
-      await ridesApi.cancelRequest(rideRequestId)
+      await ridesApi.cancelRequest(rideRequestId, reasonCode)
     } catch {
       // request may have already resolved server-side — proceed to close the panel regardless
     }
@@ -73,9 +77,10 @@ export function SearchingPanel({
         <p className="font-display text-lg font-bold">Finding your driver…</p>
         <p className="mt-1 text-sm text-ink-700/60">RIVO is contacting the best nearby driver for your trip.</p>
       </div>
-      <Button variant="secondary" icon={<X className="h-4 w-4" />} onClick={cancel}>
+      <Button variant="secondary" icon={<X className="h-4 w-4" />} onClick={() => setShowReasons(true)}>
         Cancel request
       </Button>
+      {showReasons && <CancellationReasonSheet role="passenger" onSelect={cancel} onClose={() => setShowReasons(false)} />}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import {
   AlertTriangle,
+  Ban,
   Banknote,
   Bell,
   Car,
@@ -47,6 +48,7 @@ import { DriverAcquisitionPanel } from "./DriverAcquisitionPanel"
 import { PromotionsPanel } from "./PromotionsPanel"
 import { HeatMapPanel } from "./HeatMapPanel"
 import { DispatchAnalyticsPanel } from "./DispatchAnalyticsPanel"
+import { CancellationAnalyticsPanel } from "./CancellationAnalyticsPanel"
 
 const nav = [
   {
@@ -70,6 +72,7 @@ const nav = [
       { label: "Active Rides", icon: Route },
       { label: "Completed Rides", icon: CheckCircle2 },
       { label: "Cancelled Rides", icon: FileClock },
+      { label: "Cancellation Patterns", icon: Ban },
     ],
   },
   {
@@ -110,7 +113,7 @@ const nav = [
   },
 ]
 
-const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Demand Heat Map", "Dispatch Performance", "Passengers", "Drivers", "Ride Requests"])
+const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Passengers", "Drivers", "Ride Requests"])
 
 export function AdminDashboard() {
   const { user } = useAuth()
@@ -211,6 +214,8 @@ export function AdminDashboard() {
             <HeatMapPanel />
           ) : active === "Dispatch Performance" ? (
             <DispatchAnalyticsPanel />
+          ) : active === "Cancellation Patterns" ? (
+            <CancellationAnalyticsPanel />
           ) : active === "Passengers" ? (
             <DirectoryPanel kind="passengers" />
           ) : active === "Drivers" ? (

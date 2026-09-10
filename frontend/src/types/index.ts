@@ -332,6 +332,24 @@ export interface DispatchAnalytics {
   noMatchReasonBreakdown: { reason: string; count: number }[]
 }
 
+export interface CancellationAnalytics {
+  range: { from: string; to: string }
+  cityId: string | null
+  postMatch: {
+    total: number
+    byPassenger: number
+    byDriver: number
+    byReasonCode: { reason: string; count: number }[]
+    feeChargedCount: number
+  }
+  preMatch: {
+    total: number
+    byReasonCode: { reason: string; count: number }[]
+  }
+  topCancellingPassengers: { userId: string; fullName: string; completedRides: number; cancelledRides: number; cancellationRatePct: number }[]
+  topCancellingDrivers: { userId: string; fullName: string; completedRides: number; cancelledRides: number; cancellationRatePct: number }[]
+}
+
 export type DocType = "national_id" | "driving_license" | "vehicle_registration" | "insurance" | "route_permit" | "profile_photo"
 
 export interface DriverDocument {

@@ -476,6 +476,8 @@ model RideRequest {
   /// dashboards can query/aggregate it instead of parsing log lines.
   dispatchStage                 String?
   noMatchReason                 String?
+  /// Phase 5 §14 — structured reason when a passenger cancels before a driver is matched (PassengerCancellationReason).
+  cancellationReasonCode         String?
 
   passenger    PassengerProfile @relation(fields: [passengerId], references: [id])
   city         City             @relation(fields: [cityId], references: [id])
@@ -572,6 +574,15 @@ model Ride {
   completedAt                    DateTime?
   cancelledAt                    DateTime?
   cancellationReason              String?
+  /// Phase 5 §14 — structured reason code (PassengerCancellationReason |
+  /// DriverCancellationReason depending on who cancelled); cancellationReason
+  /// above stays as an optional free-text note, never the primary signal.
+  cancellationReasonCode          String?
+  /// Set only when a configurable cancellation-fee policy actually
+  /// charged the cancelling party (never true by default — see
+  /// cancellationService.ts's "no automatic penalties without
+  /// configurable policy").
+  cancellationFeeCharged          Boolean  @default(false)
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
 

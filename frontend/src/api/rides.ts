@@ -30,7 +30,7 @@ export const ridesApi = {
   }) => api.post<CreateRideRequestResult>("/ride-requests", input),
 
   getRequest: (id: string) => api.get<{ request: Record<string, unknown> }>(`/ride-requests/${id}`),
-  cancelRequest: (id: string) => api.delete<{ ok: boolean }>(`/ride-requests/${id}`),
+  cancelRequest: (id: string, reasonCode?: string) => api.delete<{ ok: boolean }>(`/ride-requests/${id}`, reasonCode ? { reasonCode } : undefined),
   getOffers: (id: string) =>
     api.get<{
       request: { id: string; status: string; proposedFare: number; suggestedFare: number }
@@ -53,7 +53,8 @@ export const ridesApi = {
   getRide: (id: string) => api.get<{ ride: RideSummary & { statusHistory: { status: string; changedAt: string }[] } }>(`/rides/${id}`),
   listRides: (query?: { status?: string; page?: number; pageSize?: number }) =>
     api.get<{ rides: RideSummary[]; total: number }>("/rides", query),
-  updateStatus: (rideId: string, target: string, reason?: string) => api.post<{ ride: RideSummary }>(`/rides/${rideId}/status`, { target, reason }),
+  updateStatus: (rideId: string, target: string, reason?: string, reasonCode?: string) =>
+    api.post<{ ride: RideSummary }>(`/rides/${rideId}/status`, { target, reason, reasonCode }),
   submitRating: (rideId: string, score: number, comment?: string) => api.post<{ rating: unknown }>(`/rides/${rideId}/ratings`, { score, comment }),
 
   getMessages: (rideId: string) => api.get<{ messages: { id: string; senderId: string; body: string; createdAt: string }[] }>(`/rides/${rideId}/messages`),

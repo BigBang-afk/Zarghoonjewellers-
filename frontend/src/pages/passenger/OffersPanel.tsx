@@ -4,6 +4,7 @@ import { Card } from "../../components/ui/Card"
 import { Button } from "../../components/ui/Button"
 import { Badge } from "../../components/ui/Badge"
 import { EmptyState } from "../../components/ui/States"
+import { CancellationReasonSheet } from "../../components/CancellationReasonSheet"
 import { ridesApi } from "../../api/rides"
 import { getSocket } from "../../services/socket"
 import { useToast, errorMessage } from "../../shared/Toast"
@@ -29,6 +30,7 @@ export function OffersPanel({
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>("price")
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [showReasons, setShowReasons] = useState(false)
   const { push } = useToast()
 
   async function refresh() {
@@ -87,9 +89,10 @@ export function OffersPanel({
     }
   }
 
-  async function cancel() {
+  async function cancel(reasonCode: string) {
+    setShowReasons(false)
     try {
-      await ridesApi.cancelRequest(rideRequestId)
+      await ridesApi.cancelRequest(rideRequestId, reasonCode)
     } catch {
       // ignore — proceed to close regardless
     }
@@ -103,10 +106,11 @@ export function OffersPanel({
           <p className="font-display text-lg font-bold">Available drivers</p>
           <p className="text-xs text-ink-700/60">{statusMessage ?? `${offers.length} ${offers.length === 1 ? "offer" : "offers"} so far`}</p>
         </div>
-        <button onClick={cancel} className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-900/[0.05]">
+        <button onClick={() => setShowReasons(true)} className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-900/[0.05]">
           <X className="h-4 w-4" />
         </button>
       </div>
+      {showReasons && <CancellationReasonSheet role="passenger" onSelect={cancel} onClose={() => setShowReasons(false)} />}
 
       <div className="mb-3 flex items-center gap-2 overflow-x-auto scrollbar-none">
         <ArrowDownUp className="h-3.5 w-3.5 shrink-0 text-ink-700/40" />

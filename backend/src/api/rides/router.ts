@@ -22,12 +22,17 @@ import { cancelRideRequest, updateRideStatus } from "../../services/rideLifecycl
 import { submitRating } from "../../services/ratingService.js"
 import { notify } from "../../services/notifications/NotificationService.js"
 import { emitToRide } from "../../realtime/socket.js"
-import { RideStatus } from "../../types/enums.js"
+import { RideStatus, PassengerCancellationReason, DriverCancellationReason } from "../../types/enums.js"
 
 export const ridesRouter = Router()
 ridesRouter.use(requireAuth)
 
 const latLng = z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })
+
+// Phase 5 §14 — accepts either role's reason codes at the shape layer;
+// assertValidCancellationReason() in the service enforces the actual
+// actor's own role-specific set (a passenger can't file a driver-only code).
+const anyCancellationReasonCode = z.enum([...PassengerCancellationReason, ...DriverCancellationReason])
 const placeSchema = z.object({ address: z.string().trim().min(1).max(200) }).merge(latLng)
 
 // ---------------------------------------------------------------------
@@ -121,9 +126,10 @@ ridesRouter.get(
 ridesRouter.delete(
   "/ride-requests/:id",
   requireRole("passenger"),
+  validateBody(z.object({ reasonCode: anyCancellationReasonCode.optional() }).optional()),
   asyncHandler(async (req, res) => {
     const passenger = await getPassengerProfileOrThrow(req.auth!.userId)
-    const result = await cancelRideRequest(req.params.id, passenger.id)
+    const result = await cancelRideRequest(req.params.id, passenger.id, req.body?.reasonCode)
     res.json(result)
   }),
 )
@@ -339,7 +345,13 @@ ridesRouter.get(
 
 ridesRouter.post(
   "/rides/:id/status",
-  validateBody(z.object({ target: z.enum(RideStatus), reason: z.string().trim().max(280).optional() })),
+  validateBody(
+    z.object({
+      target: z.enum(RideStatus),
+      reason: z.string().trim().max(280).optional(),
+      reasonCode: anyCancellationReasonCode.optional(),
+    }),
+  ),
   asyncHandler(async (req, res) => {
     if (req.auth!.role !== "passenger" && req.auth!.role !== "driver") throw ApiError.forbidden()
     const ride = await updateRideStatus({
@@ -348,6 +360,7 @@ ridesRouter.post(
       actorRole: req.auth!.role as "passenger" | "driver",
       target: req.body.target,
       reason: req.body.reason,
+      reasonCode: req.body.reasonCode,
     })
     res.json({ ride })
   }),
