@@ -236,6 +236,20 @@ export interface DriverAcquisitionCampaign {
   vehicleType?: { name: string } | null
 }
 
+export interface ReferralSummary {
+  code: string | null
+  currencyCode: string
+  referralsMade: {
+    id: string
+    referredName: string
+    status: "pending" | "rewarded"
+    rewardAmountReferrer: number | null
+    createdAt: string
+    rewardedAt: string | null
+  }[]
+  totalRewardedRs: number
+}
+
 export type DocType = "national_id" | "driving_license" | "vehicle_registration" | "insurance" | "route_permit" | "profile_photo"
 
 export interface DriverDocument {

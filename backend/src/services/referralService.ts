@@ -5,7 +5,7 @@ import { getSetting } from "../config/settings.js"
 import { notify } from "./notifications/NotificationService.js"
 import { recordRiskEvent } from "./riskService.js"
 import { resolveUserCurrency } from "../shared/currency.js"
-import { addMoney } from "../utils/money.js"
+import { addMoney, formatMoney } from "../utils/money.js"
 
 function codeFromName(fullName: string): string {
   const base = fullName.replace(/[^a-zA-Z]/g, "").slice(0, 6).toUpperCase() || "RIVO"
@@ -58,19 +58,28 @@ export async function applyReferralCode(referredUserId: string, code: string): P
 }
 
 /**
- * Called after any ride completes for the *referred* user. Rewards are
- * only issued once the configurable qualifying action (N completed
- * rides, default 1) is actually met — never at signup.
+ * Called after any ride completes for the *referred* user — a passenger
+ * completing a ride they took, or a driver completing a ride they gave.
+ * Rewards are only issued once the configurable qualifying action (N
+ * completed rides, default 1) is actually met — never at signup. Role-
+ * agnostic: applyReferralCode() already works for either a passenger or
+ * a driver referring another passenger or driver, so qualification must
+ * too, or a driver-referring-driver referral could be created but could
+ * never actually pay out.
  */
 export async function qualifyReferralOnFirstRide(referredUserId: string): Promise<void> {
   const referral = await prisma.referral.findUnique({ where: { referredUserId } })
   if (!referral || referral.status !== "pending") return
 
-  const passenger = await prisma.passengerProfile.findUnique({ where: { userId: referredUserId } })
-  if (!passenger) return
+  const [passenger, driver] = await Promise.all([
+    prisma.passengerProfile.findUnique({ where: { userId: referredUserId } }),
+    prisma.driverProfile.findUnique({ where: { userId: referredUserId } }),
+  ])
+  const completedRides = passenger?.completedRides ?? driver?.completedRides
+  if (completedRides == null) return
 
   const qualifyingRideCount = await getSetting("referral.qualifyingRideCount")
-  if (passenger.completedRides < qualifyingRideCount) return
+  if (completedRides < qualifyingRideCount) return
 
   const [rewardReferrer, rewardReferred] = await Promise.all([
     getSetting("referral.rewardAmountReferrer"),
@@ -117,7 +126,17 @@ export async function qualifyReferralOnFirstRide(referredUserId: string): Promis
   })
 
   await Promise.all([
-    notify({ userId: referrerUser.id, type: "promo", title: "Referral reward!", body: `Rs ${rewardReferrer} added to your wallet — your referral took their first ride.` }),
-    notify({ userId: referredUser.id, type: "promo", title: "Referral bonus!", body: `Rs ${rewardReferred} added to your wallet for completing your first ride.` }),
+    notify({
+      userId: referrerUser.id,
+      type: "promo",
+      title: "Referral reward!",
+      body: `${formatMoney(rewardReferrer, currencyByUser.get(referral.referrerUserId)!)} added to your wallet — your referral completed their first ride.`,
+    }),
+    notify({
+      userId: referredUser.id,
+      type: "promo",
+      title: "Referral bonus!",
+      body: `${formatMoney(rewardReferred, currencyByUser.get(referredUserId)!)} added to your wallet for completing your first ride.`,
+    }),
   ])
 }

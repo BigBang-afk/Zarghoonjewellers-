@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Clock, Route, Star, Trophy, Wallet, Zap } from "lucide-react"
+import { Clock, Gift, Route, Star, Trophy, Wallet, Zap } from "lucide-react"
 import { Card } from "../../components/ui/Card"
 import { LoadingState } from "../../components/ui/States"
 import { Button } from "../../components/ui/Button"
@@ -17,7 +17,7 @@ const PAYOUT_STATUS_LABEL: Record<PayoutRequest["status"], string> = {
   cancelled: "Cancelled",
 }
 
-export function EarningsPanel() {
+export function EarningsPanel({ onOpenReferral }: { onOpenReferral?: () => void } = {}) {
   const [data, setData] = useState<DriverEarningsSummary | null>(null)
   const [incentives, setIncentives] = useState<DriverIncentiveSummary | null>(null)
   const [payouts, setPayouts] = useState<PayoutRequest[]>([])
@@ -76,7 +76,14 @@ export function EarningsPanel() {
 
   return (
     <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 scrollbar-none">
-      <p className="font-display text-lg font-bold">Earnings</p>
+      <div className="flex items-center justify-between">
+        <p className="font-display text-lg font-bold">Earnings</p>
+        {onOpenReferral && (
+          <button onClick={onOpenReferral} className="flex items-center gap-1.5 rounded-full bg-gold-400/15 px-3 py-1.5 text-xs font-bold text-gold-700">
+            <Gift className="h-3.5 w-3.5" /> Refer & earn
+          </button>
+        )}
+      </div>
 
       <Card className="mt-3 p-5">
         <p className="text-xs text-ink-700/60">Wallet balance</p>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Mail, Phone, ShieldCheck, User, Lock, Car } from "lucide-react"
+import { Mail, Phone, ShieldCheck, User, Lock, Car, Gift } from "lucide-react"
 import { Logo } from "../../components/Logo"
 import { Card } from "../../components/ui/Card"
 import { Button } from "../../components/ui/Button"
@@ -25,6 +25,7 @@ export function RegisterDriver() {
   const [model, setModel] = useState("")
   const [color, setColor] = useState("")
   const [plateNumber, setPlateNumber] = useState("")
+  const [referredByCode, setReferredByCode] = useState("")
   const [otpRequestId, setOtpRequestId] = useState("")
   const [code, setCode] = useState("")
   const [submitting, setSubmitting] = useState(false)
@@ -50,6 +51,7 @@ export function RegisterDriver() {
       const result = await authApi.registerDriver({
         fullName, phone, email, password, cityId,
         vehicle: { vehicleTypeCode, make, model, color: color || undefined, plateNumber },
+        referredByCode: referredByCode.trim() || undefined,
       })
       setOtpRequestId(result.otp.requestId)
       if (result.otp.devCode) setCode(result.otp.devCode)
@@ -122,6 +124,14 @@ export function RegisterDriver() {
                     <Input label="Plate number" name="plateNumber" placeholder="ICT-1234" value={plateNumber} onChange={(e) => setPlateNumber(e.target.value)} required />
                   </div>
                 </div>
+
+                <Input
+                  label="Referral code (optional)"
+                  name="referredByCode"
+                  icon={<Gift className="h-4 w-4" />}
+                  value={referredByCode}
+                  onChange={(e) => setReferredByCode(e.target.value.toUpperCase())}
+                />
 
                 <Button type="submit" fullWidth size="lg" variant="gold" disabled={submitting}>
                   {submitting ? "Creating account…" : "Continue"}

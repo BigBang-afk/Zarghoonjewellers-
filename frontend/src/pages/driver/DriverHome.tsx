@@ -18,6 +18,7 @@ import { ActiveRidePanel } from "./ActiveRidePanel"
 import { DriverRatingPanel } from "./DriverRatingPanel"
 import { EarningsPanel } from "./EarningsPanel"
 import { OnboardingPanel } from "./OnboardingPanel"
+import { ReferralPanel } from "../../components/ReferralPanel"
 
 export function DriverHome() {
   const { user } = useAuth()
@@ -30,7 +31,7 @@ export function DriverHome() {
   const [rating, setRating] = useState(5)
   const [todayRs, setTodayRs] = useState(0)
   const [currencyCode, setCurrencyCode] = useState<string | null>(null)
-  const [tab, setTab] = useState<"home" | "earnings">("home")
+  const [tab, setTab] = useState<"home" | "earnings" | "referral">("home")
 
   const [incoming, setIncoming] = useState<IncomingRequestSummary[]>([])
   const [dismissedIds, setDismissedIds] = useState<string[]>([])
@@ -242,7 +243,9 @@ export function DriverHome() {
             onDone={() => { setJustCompleted(null); loadEarningsSnapshot() }}
           />
         ) : tab === "earnings" ? (
-          <EarningsPanel />
+          <EarningsPanel onOpenReferral={() => setTab("referral")} />
+        ) : tab === "referral" ? (
+          <ReferralPanel onClose={() => setTab("earnings")} />
         ) : verificationStatus !== "approved" ? (
           <OnboardingPanel verificationStatus={verificationStatus} />
         ) : (

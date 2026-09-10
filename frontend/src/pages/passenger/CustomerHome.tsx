@@ -32,8 +32,9 @@ import { OffersPanel } from "./OffersPanel"
 import { LiveRidePanel } from "./LiveRidePanel"
 import { RatingPanel } from "./RatingPanel"
 import { WalletPanel } from "./WalletPanel"
+import { ReferralPanel } from "../../components/ReferralPanel"
 
-type View = "home" | "searching" | "offers" | "live" | "rating" | "wallet"
+type View = "home" | "searching" | "offers" | "live" | "rating" | "wallet" | "referral"
 
 export function CustomerHome() {
   const { user } = useAuth()
@@ -195,7 +196,8 @@ export function CustomerHome() {
         {view === "rating" && activeRideId && (
           <RatingPanel rideId={activeRideId} driverName={lastDriverName} driverId={lastDriverId} onDone={resetToHome} />
         )}
-        {view === "wallet" && <WalletPanel onClose={() => setView("home")} />}
+        {view === "wallet" && <WalletPanel onClose={() => setView("home")} onOpenReferral={() => setView("referral")} />}
+        {view === "referral" && <ReferralPanel onClose={() => setView("home")} />}
 
         {view === "home" &&
           (loadingRefData ? (

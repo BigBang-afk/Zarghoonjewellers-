@@ -10,7 +10,7 @@ export interface LoginResult {
 export const authApi = {
   login: (phone: string, password: string) => api.post<LoginResult>("/auth/login", { phone, password }, { auth: false }),
 
-  registerPassenger: (input: { fullName: string; phone: string; email?: string; password: string; photoUrl?: string }) =>
+  registerPassenger: (input: { fullName: string; phone: string; email?: string; password: string; photoUrl?: string; referredByCode?: string }) =>
     api.post<{ userId: string; otp: { requestId: string; expiresAt: string; devCode?: string } }>("/auth/register/passenger", input, { auth: false }),
 
   registerDriver: (input: {
@@ -20,6 +20,7 @@ export const authApi = {
     password: string
     cityId: string
     vehicle: { vehicleTypeCode: string; make: string; model: string; year?: number; color?: string; plateNumber: string }
+    referredByCode?: string
   }) =>
     api.post<{ userId: string; otp: { requestId: string; expiresAt: string; devCode?: string }; note: string }>(
       "/auth/register/driver",

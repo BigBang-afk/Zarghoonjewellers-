@@ -5,6 +5,7 @@ import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
 import { requireAuth } from "../../middleware/auth.js"
 import { applyReferralCode } from "../../services/referralService.js"
+import { resolveUserCurrency } from "../../shared/currency.js"
 import { NotificationType } from "../../types/enums.js"
 import { ApiError } from "../../utils/apiError.js"
 import { referralRateLimit } from "../../middleware/rateLimit.js"
@@ -26,9 +27,11 @@ accountRouter.get(
     const totalRewarded = referralsMade
       .filter((r) => r.status === "rewarded")
       .reduce((sum, r) => sum + (r.rewardAmountReferrer ?? 0), 0)
+    const currencyCode = await resolveUserCurrency(req.auth!.userId)
 
     res.json({
       code: referralCode?.code ?? null,
+      currencyCode,
       referralsMade: referralsMade.map((r) => ({
         id: r.id,
         referredName: r.referred.fullName,

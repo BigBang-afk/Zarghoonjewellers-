@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Mail, Phone, ShieldCheck, User, Lock } from "lucide-react"
+import { Mail, Phone, ShieldCheck, User, Lock, Gift } from "lucide-react"
 import { Logo } from "../../components/Logo"
 import { Card } from "../../components/ui/Card"
 import { Button } from "../../components/ui/Button"
@@ -15,6 +15,7 @@ export function RegisterPassenger() {
   const [phone, setPhone] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [referredByCode, setReferredByCode] = useState("")
   const [otpRequestId, setOtpRequestId] = useState("")
   const [code, setCode] = useState("")
   const [submitting, setSubmitting] = useState(false)
@@ -26,7 +27,7 @@ export function RegisterPassenger() {
     e.preventDefault()
     setSubmitting(true)
     try {
-      const result = await authApi.registerPassenger({ fullName, phone, email: email || undefined, password })
+      const result = await authApi.registerPassenger({ fullName, phone, email: email || undefined, password, referredByCode: referredByCode.trim() || undefined })
       setOtpRequestId(result.otp.requestId)
       if (result.otp.devCode) setCode(result.otp.devCode)
       setStep("otp")
@@ -71,6 +72,13 @@ export function RegisterPassenger() {
                 <Input label="Phone number" name="phone" type="tel" icon={<Phone className="h-4 w-4" />} placeholder="+923001234567" value={phone} onChange={(e) => setPhone(e.target.value)} required />
                 <Input label="Email (optional)" name="email" type="email" icon={<Mail className="h-4 w-4" />} value={email} onChange={(e) => setEmail(e.target.value)} />
                 <Input label="Password" name="password" type="password" icon={<Lock className="h-4 w-4" />} minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <Input
+                  label="Referral code (optional)"
+                  name="referredByCode"
+                  icon={<Gift className="h-4 w-4" />}
+                  value={referredByCode}
+                  onChange={(e) => setReferredByCode(e.target.value.toUpperCase())}
+                />
                 <Button type="submit" fullWidth size="lg" disabled={submitting}>
                   {submitting ? "Creating account…" : "Continue"}
                 </Button>

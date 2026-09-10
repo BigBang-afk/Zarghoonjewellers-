@@ -288,6 +288,7 @@ async function completeRide(rideId: string) {
   await Promise.all([
     recordDriverRideForIncentives(ride.driverId, ride.rideRequest.cityId, ride.rideRequest.vehicleTypeId),
     qualifyReferralOnFirstRide(ride.passenger.userId),
+    qualifyReferralOnFirstRide(ride.driver.userId),
   ])
 
   return { finalFare, commissionAmount, driverPayout }

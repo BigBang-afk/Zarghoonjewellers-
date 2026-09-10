@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ArrowLeft, Wallet as WalletIcon } from "lucide-react"
+import { ArrowLeft, Gift, Wallet as WalletIcon } from "lucide-react"
 import { Card } from "../../components/ui/Card"
 import { Button } from "../../components/ui/Button"
 import { LoadingState } from "../../components/ui/States"
@@ -11,7 +11,7 @@ import type { WalletTransaction } from "../../types"
 
 const TOPUP_AMOUNTS = [200, 500, 1000, 2000]
 
-export function WalletPanel({ onClose }: { onClose: () => void }) {
+export function WalletPanel({ onClose, onOpenReferral }: { onClose: () => void; onOpenReferral?: () => void }) {
   const { push } = useToast()
   const { locale } = useLocale()
   const [loading, setLoading] = useState(true)
@@ -58,7 +58,12 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
         <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-900/[0.05]">
           <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
         </button>
-        <p className="font-display text-lg font-bold">Wallet</p>
+        <p className="flex-1 font-display text-lg font-bold">Wallet</p>
+        {onOpenReferral && (
+          <button onClick={onOpenReferral} className="flex items-center gap-1.5 rounded-full bg-gold-400/15 px-3 py-1.5 text-xs font-bold text-gold-700">
+            <Gift className="h-3.5 w-3.5" /> Refer & earn
+          </button>
+        )}
       </div>
 
       {loading ? (
