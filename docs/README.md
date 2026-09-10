@@ -28,6 +28,13 @@ real, what's mocked, and how to run it.
 | 10 | [Project Structure](./10-project-structure.md) | Repository/folder layout for the full, multi-app system |
 | 11 | [Design System](./11-design-system.md) | Brand, logo concept, color system, typography, components, states |
 | 12 | [Phase 2 Completion Report](./12-phase-2-completion-report.md) | What was built, how to run it, real vs. mocked, known limitations |
+| 13 | [Phase 3 Completion Report](./13-phase-3-completion-report.md) | Smart matching, wallet/promotions/referrals, incentives, scheduled rides, business accounts, safety/trust, fraud monitoring, admin live-ops |
+| 14 | [API Reference (as implemented)](./14-api-reference.md) | Every real endpoint — method, path, auth, validation, response, errors — generated from the actual router source, not the earlier design doc |
+| 15 | [Production Configuration](./15-production-configuration.md) | Environments, env vars, secrets, SQLite→Postgres migration path |
+| 16 | [CI/CD Foundation](./16-cicd.md) | What `.github/workflows/ci.yml` runs and why, known gaps |
+| 17 | [Backup & Recovery](./17-backup-recovery.md) | Backup tooling, restore procedure, migration rollback |
+| 18 | [App Store Checklist](./18-app-store-checklist.md) | Honest checklist against what's actually ready for Play Store/App Store submission |
+| 19 | [Performance Targets](./19-performance-targets.md) | MVP latency/reliability/dispatch targets and the real instrumentation to check them |
 
 ## Phase 1 scope (architecture + 4 static screens)
 

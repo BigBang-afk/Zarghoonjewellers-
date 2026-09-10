@@ -12,6 +12,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
+    "backup": "node scripts/backup-sqlite.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

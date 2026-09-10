@@ -8,6 +8,7 @@ import { ApiError } from "../../utils/apiError.js"
 import { requireAdminRole } from "../../middleware/auth.js"
 import { writeAuditLog } from "../../shared/audit.js"
 import { observabilitySnapshot } from "../../services/observability.js"
+import { AdminRole } from "../../types/enums.js"
 
 export const adminSystemRouter = Router()
 
@@ -58,7 +59,7 @@ adminSystemRouter.post(
       phone: z.string().trim().min(7).max(15),
       email: z.string().trim().email(),
       password: z.string().min(8).max(72),
-      role: z.enum(["super_admin", "ops_manager", "support_agent", "finance", "safety_officer", "read_only"]),
+      role: z.enum(AdminRole),
       cityScope: z.string().uuid().optional(),
     }),
   ),
