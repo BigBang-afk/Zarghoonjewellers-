@@ -290,6 +290,35 @@ export interface PromotionAnalytics {
   usageCount: number
 }
 
+export interface ServiceZone {
+  id: string
+  cityId: string
+  name: string
+  isActive: boolean
+}
+
+export interface DemandMapCell {
+  row: number
+  col: number
+  centerLat: number
+  centerLng: number
+  onlineDrivers: number
+  openRequests: number
+  demandRatio: number
+  cancellationRatePct: number
+  status: "green" | "yellow" | "red"
+  flags: { highDemand: boolean; lowSupply: boolean; highCancellation: boolean }
+}
+
+export interface DemandMap {
+  cells: DemandMapCell[]
+  gridSize: number
+  range: string
+  zoneId: string | null
+  thresholds?: { greenMaxRatio: number; yellowMaxRatio: number }
+  bounds?: { minLat: number; maxLat: number; minLng: number; maxLng: number }
+}
+
 export type DocType = "national_id" | "driving_license" | "vehicle_registration" | "insurance" | "route_permit" | "profile_photo"
 
 export interface DriverDocument {

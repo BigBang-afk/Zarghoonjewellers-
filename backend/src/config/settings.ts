@@ -103,6 +103,13 @@ export interface PlatformSettingsShape {
   /** Percentage off, applied via a real single-use Promotion generated at send time — never just claimed in copy. */
   "retention.winbackDiscountPct": number
   "retention.winbackDiscountValidDays": number
+
+  // Phase 5 §10 — supply/demand dashboard traffic-light thresholds. A
+  // cell/zone's open-requests-to-available-drivers ratio at or below
+  // greenMaxRatio is healthy; above that up to yellowMaxRatio is a
+  // caution; above yellowMaxRatio is red. Configurable, never hard-coded.
+  "supplyDemand.greenMaxRatio": number
+  "supplyDemand.yellowMaxRatio": number
 }
 
 const DEFAULTS: PlatformSettingsShape = {
@@ -169,6 +176,9 @@ const DEFAULTS: PlatformSettingsShape = {
   "retention.resendCooldownDays": 14,
   "retention.winbackDiscountPct": 20,
   "retention.winbackDiscountValidDays": 14,
+
+  "supplyDemand.greenMaxRatio": 0.8,
+  "supplyDemand.yellowMaxRatio": 1.5,
 }
 
 const CACHE_TTL_MS = 5_000

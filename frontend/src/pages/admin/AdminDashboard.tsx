@@ -27,6 +27,7 @@ import {
   BarChart3,
   FileBarChart,
   TrendingUp,
+  Flame,
 } from "lucide-react"
 import { Logo } from "../../components/Logo"
 import { Card } from "../../components/ui/Card"
@@ -43,6 +44,7 @@ import { DriverVerificationPanel } from "./DriverVerificationPanel"
 import { DirectoryPanel } from "./DirectoryPanel"
 import { DriverAcquisitionPanel } from "./DriverAcquisitionPanel"
 import { PromotionsPanel } from "./PromotionsPanel"
+import { HeatMapPanel } from "./HeatMapPanel"
 
 const nav = [
   {
@@ -50,6 +52,7 @@ const nav = [
     items: [
       { label: "Dashboard", icon: LayoutGrid },
       { label: "Live Map", icon: MapPinned },
+      { label: "Demand Heat Map", icon: Flame },
     ],
   },
   {
@@ -104,7 +107,7 @@ const nav = [
   },
 ]
 
-const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Passengers", "Drivers", "Ride Requests"])
+const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Demand Heat Map", "Passengers", "Drivers", "Ride Requests"])
 
 export function AdminDashboard() {
   const { user } = useAuth()
@@ -201,6 +204,8 @@ export function AdminDashboard() {
             <DriverAcquisitionPanel />
           ) : active === "Promotions" ? (
             <PromotionsPanel />
+          ) : active === "Demand Heat Map" ? (
+            <HeatMapPanel />
           ) : active === "Passengers" ? (
             <DirectoryPanel kind="passengers" />
           ) : active === "Drivers" ? (

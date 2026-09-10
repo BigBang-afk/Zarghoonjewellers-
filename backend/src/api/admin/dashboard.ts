@@ -153,27 +153,35 @@ adminDashboardRouter.get(
   asyncHandler(async (req, res) => {
     const cityId = req.query.cityId as string | undefined
     if (!cityId) return res.status(400).json({ error: { code: "CITY_REQUIRED", message: "cityId is required." } })
+    // Zone boundaries (ServiceZone.boundaryGeoJson) aren't populated with
+    // real polygon geometry yet in this system, so this can only filter
+    // the rows that already carry a zoneId (ride requests/rides) — driver
+    // positions have no zone tag to filter by. Documented, not hidden.
+    const zoneId = req.query.zoneId as string | undefined
 
     const gridSize = Math.min(10, Math.max(2, Number(req.query.gridSize) || 5))
-    // Time range (Phase 4 §9) — how far back "recent rides" (completed +
-    // cancelled) looks; online drivers and open requests are always
-    // current, since a past demand snapshot of who's online is meaningless.
+    // Time range (Phase 4 §9 / Phase 5 §11) — how far back "recent rides"
+    // (completed + cancelled) looks; online drivers and open requests are
+    // always current, since a past demand snapshot of who's online now
+    // is meaningless.
     const range = (req.query.range as string) || "lastHour"
     const rideCreatedFilter = rideTimeRangeFilter(range)
 
-    const [onlineDrivers, openRequests, recentRides] = await Promise.all([
+    const [onlineDrivers, openRequests, recentRides, greenMaxRatio, yellowMaxRatio] = await Promise.all([
       prisma.driverProfile.findMany({
         where: { cityId, availabilityStatus: "online", lastLat: { not: null }, lastLng: { not: null } },
         select: { lastLat: true, lastLng: true },
       }),
       prisma.rideRequest.findMany({
-        where: { cityId, status: { in: ["searching", "offers_open"] } },
+        where: { cityId, status: { in: ["searching", "offers_open"] }, ...(zoneId ? { zoneId } : {}) },
         include: { pickup: { select: { lat: true, lng: true } } },
       }),
       prisma.ride.findMany({
-        where: { rideRequest: { cityId }, createdAt: rideCreatedFilter },
+        where: { rideRequest: { cityId, ...(zoneId ? { zoneId } : {}) }, createdAt: rideCreatedFilter },
         select: { status: true, pickup: { select: { lat: true, lng: true } } },
       }),
+      getSetting("supplyDemand.greenMaxRatio"),
+      getSetting("supplyDemand.yellowMaxRatio"),
     ])
 
     const points = [
@@ -181,7 +189,7 @@ adminDashboardRouter.get(
       ...openRequests.map((r) => ({ lat: r.pickup.lat, lng: r.pickup.lng })),
       ...recentRides.map((r) => ({ lat: r.pickup.lat, lng: r.pickup.lng })),
     ]
-    if (points.length === 0) return res.json({ cells: [], gridSize, range })
+    if (points.length === 0) return res.json({ cells: [], gridSize, range, zoneId: zoneId ?? null })
 
     const lats = points.map((p) => p.lat)
     const lngs = points.map((p) => p.lng)
@@ -224,6 +232,18 @@ adminDashboardRouter.get(
       const demandRatio = c.openRequests / Math.max(1, c.onlineDrivers)
       const totalRecentRides = c.completedRides + c.cancelledRides
       const cancellationRatePct = totalRecentRides ? round2((c.cancelledRides / totalRecentRides) * 100) : 0
+      // Traffic-light status (Phase 5 §10) — admin-configurable, not
+      // hard-coded: a cell with open requests but zero drivers is red
+      // regardless of ratio (a ratio against zero supply understates how
+      // bad it is), otherwise the ratio decides.
+      const status: "green" | "yellow" | "red" =
+        c.onlineDrivers === 0 && c.openRequests > 0
+          ? "red"
+          : demandRatio <= greenMaxRatio
+            ? "green"
+            : demandRatio <= yellowMaxRatio
+              ? "yellow"
+              : "red"
       return {
         row: c.row,
         col: c.col,
@@ -233,15 +253,16 @@ adminDashboardRouter.get(
         openRequests: c.openRequests,
         demandRatio: round2(demandRatio),
         cancellationRatePct,
+        status,
         flags: {
-          highDemand: demandRatio > 1.5,
+          highDemand: demandRatio > yellowMaxRatio,
           lowSupply: c.onlineDrivers === 0 && c.openRequests > 0,
           highCancellation: totalRecentRides >= 3 && cancellationRatePct >= cancellationThreshold,
         },
       }
     })
 
-    res.json({ cells: result, gridSize, range, bounds: { minLat, maxLat, minLng, maxLng } })
+    res.json({ cells: result, gridSize, range, zoneId: zoneId ?? null, thresholds: { greenMaxRatio, yellowMaxRatio }, bounds: { minLat, maxLat, minLng, maxLng } })
   }),
 )
 
@@ -317,11 +338,16 @@ adminDashboardRouter.get(
 adminDashboardRouter.get(
   "/supply/dashboard",
   asyncHandler(async (req, res) => {
-    const { cityId } = req.query as Record<string, string>
+    const { cityId, zoneId } = req.query as Record<string, string>
     const cityFilter = cityId ? { cityId } : {}
+    // Driver supply isn't zone-tagged (see the demand-map endpoint's note
+    // on ServiceZone.boundaryGeoJson not carrying real geometry yet) — a
+    // zoneId filter here only narrows the open-requests side.
+    const requestZoneFilter = zoneId ? { zoneId } : {}
     const stalenessMinutes = await getSetting("matching.locationStalenessMinutes")
     const staleCutoff = new Date(Date.now() - stalenessMinutes * 60_000)
     const searchRadiusKm = await getSetting("matching.initialRadiusKm")
+    const yellowMaxRatio = await getSetting("supplyDemand.yellowMaxRatio")
 
     const [onlineDriverRows, busyCount, offlineCount, awaitingVerification, openRequests] = await Promise.all([
       prisma.driverProfile.findMany({
@@ -332,7 +358,7 @@ adminDashboardRouter.get(
       prisma.driverProfile.count({ where: { availabilityStatus: "offline", ...cityFilter } }),
       prisma.driverProfile.count({ where: { verificationStatus: { in: ["pending", "under_review"] }, ...cityFilter } }),
       prisma.rideRequest.findMany({
-        where: { status: { in: ["searching", "offers_open"] }, ...cityFilter },
+        where: { status: { in: ["searching", "offers_open"] }, ...cityFilter, ...requestZoneFilter },
         include: { pickup: { select: { lat: true, lng: true, address: true } } },
         orderBy: { createdAt: "asc" },
         take: 20,
@@ -348,7 +374,7 @@ adminDashboardRouter.get(
     const available = positioned.filter((d) => !busyOnOfferIds.has(d.id))
 
     const alerts: string[] = []
-    if (openRequests.length > 0 && available.length > 0 && openRequests.length / available.length > 1.5) {
+    if (openRequests.length > 0 && available.length > 0 && openRequests.length / available.length > yellowMaxRatio) {
       alerts.push(`Demand is high right now — ${openRequests.length} open requests against ${available.length} available drivers.`)
     } else if (openRequests.length > 0 && available.length === 0) {
       alerts.push(`${openRequests.length} open request${openRequests.length === 1 ? "" : "s"} and no available drivers right now.`)
@@ -360,6 +386,17 @@ adminDashboardRouter.get(
       }
     }
 
+    const greenMaxRatio = await getSetting("supplyDemand.greenMaxRatio")
+    const supplyDemandRatio = openRequests.length ? round2(openRequests.length / Math.max(1, available.length)) : 0
+    const status: "green" | "yellow" | "red" =
+      available.length === 0 && openRequests.length > 0
+        ? "red"
+        : supplyDemandRatio <= greenMaxRatio
+          ? "green"
+          : supplyDemandRatio <= yellowMaxRatio
+            ? "yellow"
+            : "red"
+
     res.json({
       onlineDrivers: onlineDriverRows.length,
       availableDrivers: available.length,
@@ -368,6 +405,8 @@ adminDashboardRouter.get(
       staleGpsDrivers: staleGpsCount,
       driversAwaitingVerification: awaitingVerification,
       openRequestsCount: openRequests.length,
+      supplyDemandRatio,
+      status,
       alerts,
     })
   }),
@@ -377,6 +416,8 @@ adminDashboardRouter.get(
 function rideTimeRangeFilter(range: string): { gte: Date; lt?: Date } {
   const now = new Date()
   switch (range) {
+    case "last15min":
+      return { gte: new Date(now.getTime() - 15 * 60_000) }
     case "today": {
       const start = startOfToday()
       return { gte: start }

@@ -1,5 +1,5 @@
 import { api } from "./client"
-import type { AdminKpis, City, DriverAcquisitionCampaign, DriverFunnelStage, Promotion, PromotionAnalytics } from "../types"
+import type { AdminKpis, City, DriverAcquisitionCampaign, DriverFunnelStage, DemandMap, Promotion, PromotionAnalytics, ServiceZone } from "../types"
 
 export const adminApi = {
   kpis: (cityId?: string) => api.get<AdminKpis>("/admin/dashboard/kpis", cityId ? { cityId } : undefined),
@@ -66,4 +66,7 @@ export const adminApi = {
   createPromotion: (data: Partial<Promotion>) => api.post<{ promotion: Promotion }>("/admin/promotions", data),
   updatePromotion: (id: string, data: Partial<Promotion>) => api.put<{ promotion: Promotion }>(`/admin/promotions/${id}`, data),
   promotionAnalytics: (id: string) => api.get<PromotionAnalytics>(`/admin/promotions/${id}/analytics`),
+  serviceZones: (cityId?: string) => api.get<{ zones: ServiceZone[] }>("/admin/service-zones", cityId ? { cityId } : undefined),
+  demandMap: (query: { cityId: string; zoneId?: string; range?: string; gridSize?: number }) =>
+    api.get<DemandMap>("/admin/demand-map", query),
 }
