@@ -2,6 +2,7 @@ import { Router } from "express"
 import { prisma } from "../../utils/prisma.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { getSetting } from "../../config/settings.js"
+import { haversineKm } from "../../utils/geo.js"
 
 export const adminDashboardRouter = Router()
 
@@ -138,7 +139,11 @@ adminDashboardRouter.get(
     if (!cityId) return res.status(400).json({ error: { code: "CITY_REQUIRED", message: "cityId is required." } })
 
     const gridSize = Math.min(10, Math.max(2, Number(req.query.gridSize) || 5))
-    const since24h = new Date(Date.now() - 24 * 3_600_000)
+    // Time range (Phase 4 §9) — how far back "recent rides" (completed +
+    // cancelled) looks; online drivers and open requests are always
+    // current, since a past demand snapshot of who's online is meaningless.
+    const range = (req.query.range as string) || "lastHour"
+    const rideCreatedFilter = rideTimeRangeFilter(range)
 
     const [onlineDrivers, openRequests, recentRides] = await Promise.all([
       prisma.driverProfile.findMany({
@@ -150,7 +155,7 @@ adminDashboardRouter.get(
         include: { pickup: { select: { lat: true, lng: true } } },
       }),
       prisma.ride.findMany({
-        where: { rideRequest: { cityId }, createdAt: { gte: since24h } },
+        where: { rideRequest: { cityId }, createdAt: rideCreatedFilter },
         select: { status: true, pickup: { select: { lat: true, lng: true } } },
       }),
     ])
@@ -160,7 +165,7 @@ adminDashboardRouter.get(
       ...openRequests.map((r) => ({ lat: r.pickup.lat, lng: r.pickup.lng })),
       ...recentRides.map((r) => ({ lat: r.pickup.lat, lng: r.pickup.lng })),
     ]
-    if (points.length === 0) return res.json({ cells: [], gridSize })
+    if (points.length === 0) return res.json({ cells: [], gridSize, range })
 
     const lats = points.map((p) => p.lat)
     const lngs = points.map((p) => p.lng)
@@ -220,7 +225,7 @@ adminDashboardRouter.get(
       }
     })
 
-    res.json({ cells: result, gridSize, bounds: { minLat, maxLat, minLng, maxLng } })
+    res.json({ cells: result, gridSize, range, bounds: { minLat, maxLat, minLng, maxLng } })
   }),
 )
 
@@ -286,6 +291,92 @@ adminDashboardRouter.get(
     })
   }),
 )
+
+/**
+ * Driver supply dashboard (Phase 4 §8) — a real-time headcount plus a
+ * couple of computed, honestly-labeled operational alerts (never a
+ * guarantee, per the spec) grounded in actual pickup locations and
+ * driver positions rather than a fabricated zone map.
+ */
+adminDashboardRouter.get(
+  "/supply/dashboard",
+  asyncHandler(async (req, res) => {
+    const { cityId } = req.query as Record<string, string>
+    const cityFilter = cityId ? { cityId } : {}
+    const stalenessMinutes = await getSetting("matching.locationStalenessMinutes")
+    const staleCutoff = new Date(Date.now() - stalenessMinutes * 60_000)
+    const searchRadiusKm = await getSetting("matching.initialRadiusKm")
+
+    const [onlineDriverRows, busyCount, offlineCount, awaitingVerification, openRequests] = await Promise.all([
+      prisma.driverProfile.findMany({
+        where: { availabilityStatus: "online", ...cityFilter },
+        select: { id: true, lastLat: true, lastLng: true, lastLocationAt: true },
+      }),
+      prisma.driverProfile.count({ where: { availabilityStatus: "on_trip", ...cityFilter } }),
+      prisma.driverProfile.count({ where: { availabilityStatus: "offline", ...cityFilter } }),
+      prisma.driverProfile.count({ where: { verificationStatus: { in: ["pending", "under_review"] }, ...cityFilter } }),
+      prisma.rideRequest.findMany({
+        where: { status: { in: ["searching", "offers_open"] }, ...cityFilter },
+        include: { pickup: { select: { lat: true, lng: true, address: true } } },
+        orderBy: { createdAt: "asc" },
+        take: 20,
+      }),
+    ])
+
+    const staleGpsCount = onlineDriverRows.filter((d) => !d.lastLocationAt || d.lastLocationAt < staleCutoff).length
+    const positioned = onlineDriverRows.filter((d) => d.lastLat != null && d.lastLng != null && d.lastLocationAt! >= staleCutoff)
+    // "Available" = online, positioned, and not already sitting on a
+    // pending offer for some other request right now.
+    const busyOnOffer = await prisma.rideOffer.findMany({ where: { status: "pending" }, select: { driverId: true } })
+    const busyOnOfferIds = new Set(busyOnOffer.map((o) => o.driverId))
+    const available = positioned.filter((d) => !busyOnOfferIds.has(d.id))
+
+    const alerts: string[] = []
+    if (openRequests.length > 0 && available.length > 0 && openRequests.length / available.length > 1.5) {
+      alerts.push(`Demand is high right now — ${openRequests.length} open requests against ${available.length} available drivers.`)
+    } else if (openRequests.length > 0 && available.length === 0) {
+      alerts.push(`${openRequests.length} open request${openRequests.length === 1 ? "" : "s"} and no available drivers right now.`)
+    }
+    for (const r of openRequests.slice(0, 5)) {
+      const nearby = available.filter((d) => haversineKm(r.pickup, { lat: d.lastLat!, lng: d.lastLng! }) <= searchRadiusKm).length
+      if (nearby < 3) {
+        alerts.push(`Only ${nearby} available driver${nearby === 1 ? "" : "s"} within ${searchRadiusKm}km of a pickup near ${r.pickup.address}.`)
+      }
+    }
+
+    res.json({
+      onlineDrivers: onlineDriverRows.length,
+      availableDrivers: available.length,
+      busyDrivers: busyCount,
+      offlineDrivers: offlineCount,
+      staleGpsDrivers: staleGpsCount,
+      driversAwaitingVerification: awaitingVerification,
+      openRequestsCount: openRequests.length,
+      alerts,
+    })
+  }),
+)
+
+/** Maps a demand-map "range" query param to a Prisma date filter (Phase 4 §9). */
+function rideTimeRangeFilter(range: string): { gte: Date; lt?: Date } {
+  const now = new Date()
+  switch (range) {
+    case "today": {
+      const start = startOfToday()
+      return { gte: start }
+    }
+    case "yesterday": {
+      const start = startOfToday()
+      const yesterdayStart = new Date(start.getTime() - 24 * 3_600_000)
+      return { gte: yesterdayStart, lt: start }
+    }
+    case "last7days":
+      return { gte: new Date(now.getTime() - 7 * 24 * 3_600_000) }
+    case "lastHour":
+    default:
+      return { gte: new Date(now.getTime() - 3_600_000) }
+  }
+}
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100

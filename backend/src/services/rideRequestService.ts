@@ -128,6 +128,18 @@ export async function dispatchQuickMatchNext(rideRequestId: string) {
 
   const pickup = await prisma.location.findUniqueOrThrow({ where: { id: request.pickupLocationId } })
   const exclude = await alreadyContactedDriverIds(rideRequestId)
+
+  // Dispatch lifecycle hop cap (Phase 4 §7): each escalation (decline/
+  // expiry -> next-best driver) is one more RideOffer on this request.
+  // Without a ceiling, a request in a sparse area could hop through every
+  // eligible driver in the city one at a time, pestering each in turn
+  // for a passenger who's effectively unmatchable right now.
+  const maxHops = await getSetting("matching.maxDispatchHops")
+  if (exclude.length >= maxHops) {
+    await expireRequest(rideRequestId, "We tried several nearby drivers but couldn't find a match right now. Please try again shortly.")
+    return { status: "no_drivers" as const }
+  }
+
   const favoriteDriverIds = request.preferFavoriteDriver ? await getFavoriteDriverIds(request.passengerId) : undefined
   const passengerForBlocks = await prisma.passengerProfile.findUniqueOrThrow({ where: { id: request.passengerId } })
   const excludeUserIds = await getMutuallyBlockedUserIds(passengerForBlocks.userId)
