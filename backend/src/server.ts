@@ -5,6 +5,7 @@ import { initSocket } from "./realtime/socket.js"
 import { sweepExpiredNegotiations } from "./services/negotiationEngine.js"
 import { dispatchDueScheduledRides } from "./services/scheduledRideService.js"
 import { sweepDocumentExpirations } from "./services/verificationService.js"
+import { logger } from "./utils/logger.js"
 
 const app = createApp()
 const httpServer = createServer(app)
@@ -16,8 +17,7 @@ initSocket(httpServer)
 const SWEEP_INTERVAL_MS = 5_000
 setInterval(() => {
   sweepExpiredNegotiations().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error("Negotiation sweep failed:", err)
+    logger.error("negotiation_sweep_failed", { message: err instanceof Error ? err.message : String(err) })
   })
 }, SWEEP_INTERVAL_MS)
 
@@ -26,8 +26,7 @@ setInterval(() => {
 const SCHEDULED_RIDE_SWEEP_INTERVAL_MS = 60_000
 setInterval(() => {
   dispatchDueScheduledRides().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error("Scheduled ride dispatch sweep failed:", err)
+    logger.error("scheduled_ride_sweep_failed", { message: err instanceof Error ? err.message : String(err) })
   })
 }, SCHEDULED_RIDE_SWEEP_INTERVAL_MS)
 
@@ -36,12 +35,10 @@ setInterval(() => {
 const DOCUMENT_EXPIRY_SWEEP_INTERVAL_MS = 60 * 60_000
 setInterval(() => {
   sweepDocumentExpirations().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error("Document expiration sweep failed:", err)
+    logger.error("document_expiry_sweep_failed", { message: err instanceof Error ? err.message : String(err) })
   })
 }, DOCUMENT_EXPIRY_SWEEP_INTERVAL_MS)
 
 httpServer.listen(env.port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`RIVO backend listening on http://localhost:${env.port} (${env.nodeEnv})`)
+  logger.info("server_started", { port: env.port, env: env.nodeEnv })
 })

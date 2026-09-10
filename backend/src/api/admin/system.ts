@@ -7,8 +7,17 @@ import { hashPassword } from "../../utils/password.js"
 import { ApiError } from "../../utils/apiError.js"
 import { requireAdminRole } from "../../middleware/auth.js"
 import { writeAuditLog } from "../../shared/audit.js"
+import { observabilitySnapshot } from "../../services/observability.js"
 
 export const adminSystemRouter = Router()
+
+/** Live request-latency percentiles and failure counters (Phase 4 §23). */
+adminSystemRouter.get(
+  "/observability",
+  asyncHandler(async (_req, res) => {
+    res.json(observabilitySnapshot())
+  }),
+)
 
 function pagination(query: Record<string, unknown>) {
   const take = Math.min(100, Number(query.pageSize) || 20)

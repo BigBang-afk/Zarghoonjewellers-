@@ -9,6 +9,7 @@ import { getMutuallyBlockedUserIds } from "./safetyService.js"
 import { enforceBusinessRidePolicy } from "./businessService.js"
 import { notify } from "./notifications/NotificationService.js"
 import { emitToUser, emitToAdmin } from "../realtime/socket.js"
+import { recordFailure } from "./observability.js"
 import type { BookingMode, PaymentMethod } from "../types/enums.js"
 
 export interface CreateRideRequestInput {
@@ -146,6 +147,7 @@ export async function dispatchQuickMatchNext(rideRequestId: string) {
   // for a passenger who's effectively unmatchable right now.
   const maxHops = await getSetting("matching.maxDispatchHops")
   if (exclude.length >= maxHops) {
+    recordFailure("matching_failures", { rideRequestId, reason: "hop_cap_reached" })
     await expireRequest(rideRequestId, "We tried several nearby drivers but couldn't find a match right now. Please try again shortly.")
     return { status: "no_drivers" as const }
   }
@@ -165,6 +167,7 @@ export async function dispatchQuickMatchNext(rideRequestId: string) {
   })
 
   if (candidates.length === 0) {
+    recordFailure("matching_failures", { rideRequestId, reason: "no_eligible_drivers", staleExcludedCount })
     await expireRequest(
       rideRequestId,
       staleExcludedCount > 0
@@ -230,6 +233,7 @@ export async function dispatchCompetitiveBroadcast(rideRequestId: string) {
   })
 
   if (candidates.length === 0) {
+    recordFailure("matching_failures", { rideRequestId, reason: "no_eligible_drivers_broadcast" })
     await expireRequest(rideRequestId, "No drivers were available near your pickup.")
     return { status: "no_drivers" as const }
   }

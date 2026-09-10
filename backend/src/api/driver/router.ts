@@ -13,6 +13,7 @@ import { submitDriverDocument } from "../../services/verificationService.js"
 import { requestPayout, cancelPayout } from "../../services/payoutService.js"
 import { DocType, PaymentMethod } from "../../types/enums.js"
 import { getSetting } from "../../config/settings.js"
+import { recordFailure } from "../../services/observability.js"
 
 export const driverRouter = Router()
 driverRouter.use(requireAuth, requireRole("driver"))
@@ -86,6 +87,8 @@ driverRouter.patch(
     const isPoorAccuracy = req.body.accuracyMeters != null && req.body.accuracyMeters > poorAccuracyThreshold
     if (!isPoorAccuracy) {
       await checkImpossibleMovement({ driverUserId: req.auth!.userId, prev, next }).catch(() => {})
+    } else {
+      recordFailure("location_failures", { driverId: driver.id, accuracyMeters: req.body.accuracyMeters })
     }
     res.status(204).send()
   }),

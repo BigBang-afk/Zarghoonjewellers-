@@ -2,6 +2,7 @@ import { prisma } from "../../utils/prisma.js"
 import { emitToUser } from "../../realtime/socket.js"
 import { consoleEmailProvider, consolePushProvider, consoleSmsProvider } from "./ConsoleProviders.js"
 import { renderTemplate } from "./templates.js"
+import { recordFailure } from "../observability.js"
 import type { NotificationType } from "../../types/enums.js"
 
 export interface NotifyInput {
@@ -54,10 +55,18 @@ export async function notify(input: NotifyInput) {
   })
 
   if (input.external) {
-    if (input.toPhone) {
-      await consoleSmsProvider.send({ to: input.toPhone, title: input.title, body: input.body ?? "" })
+    // The external channels are best-effort fan-out: the in-app row and
+    // socket push above already delivered the notification, so a
+    // provider failure here is tracked, not thrown — never blocks the
+    // caller's own request (e.g. a ride status update) on an SMS outage.
+    try {
+      if (input.toPhone) {
+        await consoleSmsProvider.send({ to: input.toPhone, title: input.title, body: input.body ?? "" })
+      }
+      await consolePushProvider.send({ to: input.userId, title: input.title, body: input.body ?? "" })
+    } catch (err) {
+      recordFailure("notification_failures", { userId: input.userId, type: input.type, error: err instanceof Error ? err.message : String(err) })
     }
-    await consolePushProvider.send({ to: input.userId, title: input.title, body: input.body ?? "" })
   }
 
   return notification

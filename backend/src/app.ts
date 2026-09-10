@@ -5,6 +5,8 @@ import { env } from "./config/env.js"
 import { generalRateLimit } from "./middleware/rateLimit.js"
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js"
 import { sanitizeResponse } from "./middleware/sanitizeResponse.js"
+import { requestLogging } from "./middleware/requestLogging.js"
+import { prisma } from "./utils/prisma.js"
 import { authRouter } from "./api/auth/router.js"
 import { passengerRouter } from "./api/passenger/router.js"
 import { driverRouter } from "./api/driver/router.js"
@@ -36,10 +38,22 @@ export function createApp() {
       },
     }),
   )
+  app.use(requestLogging)
   app.use(generalRateLimit)
   app.use(sanitizeResponse)
 
+  // Liveness — process is up, no dependency checks (Phase 4 §23).
   app.get("/health", (_req, res) => res.json({ ok: true, service: "rivo-backend", env: env.nodeEnv }))
+
+  // Readiness — can this instance actually serve traffic right now (DB reachable)?
+  app.get("/ready", async (_req, res) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`
+      res.json({ ok: true, checks: { database: "up" } })
+    } catch {
+      res.status(503).json({ ok: false, checks: { database: "down" } })
+    }
+  })
 
   // More specific mounts must come before the bare "/v1" mount below —
   // Express matches app.use() prefixes in registration order, and

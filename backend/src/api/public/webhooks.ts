@@ -7,6 +7,7 @@ import { ApiError } from "../../utils/apiError.js"
 import { getPaymentProvider } from "../../services/payments/index.js"
 import { completePayout, failPayout } from "../../services/payoutService.js"
 import { emitToAdmin } from "../../realtime/socket.js"
+import { recordFailure } from "../../services/observability.js"
 
 /**
  * Payment provider webhooks (Phase 4 §4) — unauthenticated (a payment
@@ -49,6 +50,7 @@ webhooksRouter.post(
     if (provider.verifyWebhookSignature) {
       const signature = req.header("X-RIVO-Webhook-Signature")
       if (!provider.verifyWebhookSignature(rawBody, signature)) {
+        recordFailure("payment_errors", { provider: providerName, reason: "invalid_signature" })
         throw ApiError.unauthorized("Invalid webhook signature.")
       }
     }
@@ -69,6 +71,7 @@ webhooksRouter.post(
       await prisma.webhookEvent.update({ where: { id: event.id }, data: { status: "processed", processedAt: new Date() } })
     } catch (err) {
       await prisma.webhookEvent.update({ where: { id: event.id }, data: { status: "failed", error: err instanceof Error ? err.message : String(err) } })
+      recordFailure("payment_errors", { provider: providerName, eventId: req.body.eventId, eventType: req.body.eventType })
       emitToAdmin("webhook.processing_failed", { provider: providerName, eventId: req.body.eventId, eventType: req.body.eventType })
       // Still 200 — the event is durably recorded for manual reconciliation;
       // a 5xx here would just cause the provider to hammer us with retries
