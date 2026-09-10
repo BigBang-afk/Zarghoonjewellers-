@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from "../../utils/password.js"
 import { issueRefreshToken, revokeRefreshToken, rotateRefreshToken, signAccessToken } from "../../utils/jwt.js"
 import { requestOtp, verifyOtp } from "../../services/otp/OtpService.js"
 import { createReferralCodeForUser, applyReferralCode } from "../../services/referralService.js"
+import { sendWelcomeMessage } from "../../services/retentionService.js"
 import { resolvePlatformDefaultCurrency } from "../../shared/currency.js"
 import { enforcePilotModeForRegistration } from "../../services/pilotModeService.js"
 import { ApiError } from "../../utils/apiError.js"
@@ -268,6 +269,9 @@ authRouter.post(
       data: { phoneVerifiedAt: new Date(), status: "active" },
     })
     const session = await issueSession(user.id, user.role as UserRole)
+    if (result.purpose === "registration") {
+      sendWelcomeMessage(user.id).catch(() => {})
+    }
     res.json({ purpose: result.purpose, user: publicUser(user), ...session })
   }),
 )

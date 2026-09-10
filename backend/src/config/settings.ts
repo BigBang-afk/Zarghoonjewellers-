@@ -92,6 +92,17 @@ export interface PlatformSettingsShape {
   // than pretend it's measured. Every place that uses this labels the
   // resulting figure "estimate", never "actual".
   "finance.estimatedPaymentProcessingFeePct": number
+
+  // Phase 5 §8 — customer retention engine. Days-since-last-ride thresholds
+  // for each lifecycle nudge, plus a cooldown so the periodic sweep never
+  // re-sends the same nudge to a still-inactive user every time it runs.
+  "retention.secondRideNudgeAfterDays": number
+  "retention.inactive7dAfterDays": number
+  "retention.inactive30dAfterDays": number
+  "retention.resendCooldownDays": number
+  /** Percentage off, applied via a real single-use Promotion generated at send time — never just claimed in copy. */
+  "retention.winbackDiscountPct": number
+  "retention.winbackDiscountValidDays": number
 }
 
 const DEFAULTS: PlatformSettingsShape = {
@@ -151,6 +162,13 @@ const DEFAULTS: PlatformSettingsShape = {
   "pilotMode.requireInvitationCode": false,
 
   "finance.estimatedPaymentProcessingFeePct": 2.9,
+
+  "retention.secondRideNudgeAfterDays": 3,
+  "retention.inactive7dAfterDays": 7,
+  "retention.inactive30dAfterDays": 30,
+  "retention.resendCooldownDays": 14,
+  "retention.winbackDiscountPct": 20,
+  "retention.winbackDiscountValidDays": 14,
 }
 
 const CACHE_TTL_MS = 5_000

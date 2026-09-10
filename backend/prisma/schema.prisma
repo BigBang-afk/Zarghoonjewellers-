@@ -216,6 +216,7 @@ model User {
   billingContactFor BusinessAccount[] @relation("BusinessBillingContact")
   assignedSafetyEvents SafetyEvent[] @relation("SafetyEventAssignee")
   contentItemsCreated ContentItem[]
+  retentionNotifications RetentionNotificationLog[]
 
   @@index([role, status])
   @@index([deletionRequestedAt])
@@ -1422,6 +1423,29 @@ model ContentItem {
 // notification key + locale, so wording changes don't need a deploy.
 // notify() falls back to the in-code default string when no row exists.
 // ---------------------------------------------------------------------
+
+// ---------------------------------------------------------------------
+// Customer retention engine (Phase 5 §8) — one row per lifecycle nudge
+// actually sent. Not unique per (userId, campaign): an inactivity nudge
+// is meant to resend after a cooldown if the user is still inactive, so
+// the sweep queries the most recent row per campaign rather than
+// treating a campaign as a one-time flag (welcome/second-ride nudges
+// are one-time in practice simply because the sweep's own eligibility
+// query excludes anyone who already qualified once).
+// ---------------------------------------------------------------------
+
+/// campaign: welcome | second_ride_nudge | inactive_7d | inactive_30d
+model RetentionNotificationLog {
+  id       String   @id @default(uuid())
+  userId   String
+  campaign String
+  sentAt   DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, campaign, sentAt])
+  @@map("retention_notification_logs")
+}
 
 model NotificationTemplate {
   id        String   @id @default(uuid())

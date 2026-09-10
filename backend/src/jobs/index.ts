@@ -4,6 +4,7 @@ import { dispatchDueScheduledRides } from "../services/scheduledRideService.js"
 import { sweepDocumentExpirations } from "../services/verificationService.js"
 import { reconcileStuckPayments } from "./paymentReconciliationJob.js"
 import { runCleanupSweep } from "./cleanupJob.js"
+import { runRetentionSweep } from "../services/retentionService.js"
 
 /**
  * Every recurring background job (Phase 4 §28), started once from
@@ -31,4 +32,9 @@ export function startBackgroundJobs(): void {
 
   // Cleanup sweep (Phase 4 §28) — expired refresh tokens / stale OTP codes.
   registerJob({ name: "cleanup_sweep", intervalMs: 60 * 60_000, handler: runCleanupSweep })
+
+  // Customer retention engine (Phase 5 §8) — second-ride/7d/30d nudges.
+  // Days-scale thresholds, so hourly is plenty frequent; the per-campaign
+  // cooldown (not this interval) is what actually controls resend cadence.
+  registerJob({ name: "retention_sweep", intervalMs: 60 * 60_000, handler: runRetentionSweep })
 }

@@ -74,6 +74,24 @@ export const DEFAULT_TEMPLATES: Record<string, Record<string, TemplateDefault>> 
     en: { title: "Safety alert", body: "{{message}}" },
     ur: { title: "حفاظتی انتباہ", body: "{{message}}" },
   },
+
+  // Phase 5 §8 — customer retention engine
+  "retention.welcome": {
+    en: { title: "Welcome to RIVO!", body: "You're all set. Request your first ride whenever you're ready." },
+    ur: { title: "RIVO میں خوش آمدید!", body: "آپ تیار ہیں۔ جب چاہیں اپنی پہلی رائیڈ کی درخواست کریں۔" },
+  },
+  "retention.second_ride_nudge": {
+    en: { title: "Ready for ride #2?", body: "Your first ride went well — where to next?" },
+    ur: { title: "دوسری رائیڈ کے لیے تیار؟", body: "آپ کی پہلی رائیڈ اچھی رہی — اب کہاں جانا ہے؟" },
+  },
+  "retention.inactive_7d": {
+    en: { title: "We miss you!", body: "It's been a week since your last ride. Book one now — we're ready when you are." },
+    ur: { title: "ہمیں آپ کی یاد آتی ہے!", body: "آپ کی آخری رائیڈ کو ایک ہفتہ ہو گیا۔ ابھی بک کریں۔" },
+  },
+  "retention.inactive_30d": {
+    en: { title: "Come back to RIVO", body: "It's been a month — use code {{code}} for {{pct}}% off your next ride, valid for {{validDays}} days." },
+    ur: { title: "RIVO میں واپس آئیں", body: "ایک مہینہ ہو گیا — اگلی رائیڈ پر {{pct}}% رعایت کے لیے کوڈ {{code}} استعمال کریں، {{validDays}} دن تک درست۔" },
+  },
 }
 
 function interpolate(template: string, vars: Record<string, string | number>): string {
