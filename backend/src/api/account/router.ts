@@ -93,3 +93,107 @@ accountRouter.patch(
     res.json({ locale: user.locale })
   }),
 )
+
+// ---------------------------------------------------------------------
+// Data privacy (Phase 4 §26) — view account info, manage marketing
+// consent, export your own data, request deletion. Nothing here touches
+// financial or ride records — those are never deleted, only the User
+// row's own PII is anonymized once an admin completes a request.
+// ---------------------------------------------------------------------
+
+accountRouter.get(
+  "/me",
+  asyncHandler(async (req, res) => {
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: req.auth!.userId },
+      select: {
+        id: true, fullName: true, phone: true, email: true, photoUrl: true, role: true, status: true,
+        locale: true, marketingOptIn: true, acquisitionSource: true, acquisitionCampaign: true,
+        deletionRequestedAt: true, createdAt: true,
+        primaryCity: { select: { name: true, currencyCode: true } },
+      },
+    })
+    res.json({ account: user })
+  }),
+)
+
+accountRouter.patch(
+  "/marketing-consent",
+  validateBody(z.object({ marketingOptIn: z.boolean() })),
+  asyncHandler(async (req, res) => {
+    const user = await prisma.user.update({ where: { id: req.auth!.userId }, data: { marketingOptIn: req.body.marketingOptIn } })
+    res.json({ marketingOptIn: user.marketingOptIn })
+  }),
+)
+
+/**
+ * A minimal self-service export of the account's own data — not every
+ * table in the system, but the ones a user would reasonably ask for
+ * ("what do you have on me"): profile, ride history, wallet activity,
+ * ratings, support tickets. Large collections are capped rather than
+ * unbounded, consistent with the rest of the API's pagination approach.
+ */
+accountRouter.get(
+  "/export",
+  asyncHandler(async (req, res) => {
+    const userId = req.auth!.userId
+
+    const [user, passenger, driver, wallet, transactions, ratingsGiven, ratingsReceived, supportTickets, notifications] = await Promise.all([
+      prisma.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { id: true, fullName: true, phone: true, email: true, role: true, status: true, locale: true, marketingOptIn: true, createdAt: true },
+      }),
+      prisma.passengerProfile.findUnique({ where: { userId } }),
+      prisma.driverProfile.findUnique({ where: { userId } }),
+      prisma.wallet.findUnique({ where: { userId } }),
+      prisma.transaction.findMany({ where: { wallet: { userId } }, orderBy: { createdAt: "desc" }, take: 500 }),
+      prisma.rating.findMany({ where: { raterId: userId }, take: 500 }),
+      prisma.rating.findMany({ where: { rateeId: userId }, take: 500 }),
+      prisma.supportTicket.findMany({ where: { userId }, take: 200 }),
+      prisma.notification.findMany({ where: { userId }, orderBy: { createdAt: "desc" }, take: 200 }),
+    ])
+
+    const rides = passenger
+      ? await prisma.ride.findMany({ where: { passengerId: passenger.id }, include: { pickup: true, destination: true }, take: 500 })
+      : driver
+        ? await prisma.ride.findMany({ where: { driverId: driver.id }, include: { pickup: true, destination: true }, take: 500 })
+        : []
+
+    res.setHeader("Content-Disposition", "attachment; filename=rivo-account-data.json")
+    res.json({
+      exportedAt: new Date().toISOString(),
+      account: user,
+      passengerProfile: passenger,
+      driverProfile: driver,
+      wallet,
+      transactions,
+      ratingsGiven,
+      ratingsReceived,
+      rides,
+      supportTickets,
+      notifications,
+    })
+  }),
+)
+
+accountRouter.post(
+  "/deletion-request",
+  asyncHandler(async (req, res) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.auth!.userId } })
+    if (user.deletedAt) throw ApiError.badRequest("ALREADY_DELETED", "This account has already been deleted.")
+    if (user.deletionRequestedAt) throw ApiError.conflict("DELETION_ALREADY_REQUESTED", "A deletion request is already pending review.")
+    const updated = await prisma.user.update({ where: { id: user.id }, data: { deletionRequestedAt: new Date() } })
+    res.status(201).json({ deletionRequestedAt: updated.deletionRequestedAt })
+  }),
+)
+
+accountRouter.delete(
+  "/deletion-request",
+  asyncHandler(async (req, res) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.auth!.userId } })
+    if (!user.deletionRequestedAt) throw ApiError.notFound("No pending deletion request to cancel.")
+    if (user.deletedAt) throw ApiError.badRequest("ALREADY_DELETED", "This account has already been processed for deletion.")
+    await prisma.user.update({ where: { id: user.id }, data: { deletionRequestedAt: null } })
+    res.status(204).send()
+  }),
+)
