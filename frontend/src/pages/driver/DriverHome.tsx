@@ -104,14 +104,39 @@ export function DriverHome() {
 
   // Broadcast a location fix while online — real geolocation if granted,
   // otherwise a fixed Islamabad demo point (never silently "fake" a
-  // moving position).
+  // moving position). Each distinct failure mode is surfaced once so the
+  // driver understands why their pin might be stuck (Phase 4 §6).
   useEffect(() => {
+    let warnedPermission = false
+    let warnedUnavailable = false
+    let consecutiveNetworkFailures = 0
+
+    function handleGeolocationError(err: GeolocationPositionError) {
+      const fallback = ISLAMABAD_CURRENT_LOCATION_FALLBACK
+      if (err.code === err.PERMISSION_DENIED) {
+        if (!warnedPermission) {
+          push("info", "Location permission denied — using an approximate position until you enable it.")
+          warnedPermission = true
+        }
+      } else if (!warnedUnavailable) {
+        push("info", "Couldn't get a GPS fix — using an approximate position for now.")
+        warnedUnavailable = true
+      }
+      driverApi.updateLocation(fallback.lat, fallback.lng).catch(() => {})
+    }
+
     async function sendLocation() {
       const fallback = ISLAMABAD_CURRENT_LOCATION_FALLBACK
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-          (pos) => driverApi.updateLocation(pos.coords.latitude, pos.coords.longitude).catch(() => {}),
-          () => driverApi.updateLocation(fallback.lat, fallback.lng).catch(() => {}),
+          (pos) => {
+            consecutiveNetworkFailures = 0
+            driverApi.updateLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy).catch(() => {
+              consecutiveNetworkFailures++
+              if (consecutiveNetworkFailures === 3) push("error", "Your location updates aren't reaching RIVO — check your connection.")
+            })
+          },
+          handleGeolocationError,
           { timeout: 4000 },
         )
       } else {
@@ -125,6 +150,7 @@ export function DriverHome() {
     return () => {
       if (locationTimer.current) window.clearInterval(locationTimer.current)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
 
   async function toggleOnline() {

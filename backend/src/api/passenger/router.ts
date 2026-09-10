@@ -11,6 +11,7 @@ import { validatePromoCode } from "../../services/promoService.js"
 import { createScheduledRide, cancelScheduledRide, rescheduleRide } from "../../services/scheduledRideService.js"
 import { resolveUserCurrency } from "../../shared/currency.js"
 import { roundMoney } from "../../utils/money.js"
+import { mapProvider } from "../../services/maps/HaversineMapProvider.js"
 
 export const passengerRouter = Router()
 passengerRouter.use(requireAuth, requireRole("passenger"))
@@ -79,6 +80,31 @@ passengerRouter.get(
       if (recents.length >= 5) break
     }
     res.json({ locations: recents })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Geocoding (Phase 4 §6) — address search + reverse lookup for a pin drop.
+// ---------------------------------------------------------------------
+
+passengerRouter.get(
+  "/locations/geocode",
+  asyncHandler(async (req, res) => {
+    const address = (req.query.address as string | undefined)?.trim()
+    if (!address) throw ApiError.badRequest("ADDRESS_REQUIRED", "Provide an address to search for.")
+    const result = await mapProvider.geocode(address)
+    res.json({ result })
+  }),
+)
+
+passengerRouter.get(
+  "/locations/reverse-geocode",
+  asyncHandler(async (req, res) => {
+    const lat = Number(req.query.lat)
+    const lng = Number(req.query.lng)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw ApiError.badRequest("INVALID_COORDINATES", "Provide valid lat/lng.")
+    const result = await mapProvider.reverseGeocode({ lat, lng })
+    res.json({ result })
   }),
 )
 

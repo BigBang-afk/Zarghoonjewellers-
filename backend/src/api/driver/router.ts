@@ -12,6 +12,7 @@ import { getDriverIncentiveSummary } from "../../services/incentiveService.js"
 import { submitDriverDocument } from "../../services/verificationService.js"
 import { requestPayout, cancelPayout } from "../../services/payoutService.js"
 import { DocType, PaymentMethod } from "../../types/enums.js"
+import { getSetting } from "../../config/settings.js"
 
 export const driverRouter = Router()
 driverRouter.use(requireAuth, requireRole("driver"))
@@ -54,7 +55,14 @@ driverRouter.patch(
 
 driverRouter.patch(
   "/me/location",
-  validateBody(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })),
+  validateBody(
+    z.object({
+      lat: z.number().min(-90).max(90),
+      lng: z.number().min(-180).max(180),
+      /** GPS accuracy radius in meters, when the client's geolocation API reports one (Phase 4 §6). */
+      accuracyMeters: z.number().positive().optional(),
+    }),
+  ),
   asyncHandler(async (req, res) => {
     const driver = await getDriverProfileOrThrow(req.auth!.userId)
     // Only meaningful to broadcast while online or on a trip — an offline
@@ -69,9 +77,16 @@ driverRouter.patch(
 
     await prisma.driverProfile.update({
       where: { id: driver.id },
-      data: { lastLat: next.lat, lastLng: next.lng, lastLocationAt: next.at },
+      data: { lastLat: next.lat, lastLng: next.lng, lastLocationAt: next.at, lastLocationAccuracyM: req.body.accuracyMeters },
     })
-    await checkImpossibleMovement({ driverUserId: req.auth!.userId, prev, next }).catch(() => {})
+
+    // A poor-accuracy fix is real signal noise, not real movement — skip
+    // the impossible-speed check for it rather than risk a false positive.
+    const poorAccuracyThreshold = await getSetting("maps.poorAccuracyThresholdM")
+    const isPoorAccuracy = req.body.accuracyMeters != null && req.body.accuracyMeters > poorAccuracyThreshold
+    if (!isPoorAccuracy) {
+      await checkImpossibleMovement({ driverUserId: req.auth!.userId, prev, next }).catch(() => {})
+    }
     res.status(204).send()
   }),
 )

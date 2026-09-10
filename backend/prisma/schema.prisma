@@ -250,6 +250,10 @@ model DriverProfile {
   lastLat             Float?
   lastLng             Float?
   lastLocationAt      DateTime?
+  /// GPS accuracy radius in meters reported alongside the last ping, when
+  /// the client provides one (Phase 4 §6) — used to flag poor-accuracy
+  /// fixes for admin visibility, never to reject a location update.
+  lastLocationAccuracyM Float?
   /// JSON {lat,lng,address,activeUntil} — a soft dispatch preference only
   /// (Phase 4 §10), never a routing guarantee; not yet factored into the
   /// matching score (see Phase 4 completion report, known limitations).

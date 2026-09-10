@@ -53,6 +53,11 @@ export interface PlatformSettingsShape {
 
   // Phase 3 — scheduled rides
   "scheduledRide.dispatchLeadMinutes": number
+
+  // Phase 4 §6 — map provider selection is informational until a second
+  // provider class is registered in services/maps/; §7 — dispatch retry cap
+  "maps.poorAccuracyThresholdM": number
+  "matching.maxDispatchHops": number
 }
 
 const DEFAULTS: PlatformSettingsShape = {
@@ -90,6 +95,9 @@ const DEFAULTS: PlatformSettingsShape = {
   "risk.impossibleSpeedKmh": 150,
 
   "scheduledRide.dispatchLeadMinutes": 15,
+
+  "maps.poorAccuracyThresholdM": 100,
+  "matching.maxDispatchHops": 5,
 }
 
 const CACHE_TTL_MS = 5_000
