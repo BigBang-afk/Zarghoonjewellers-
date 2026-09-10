@@ -51,10 +51,17 @@ function place() {
   return { address, ...jitter(ISB_CENTER) }
 }
 
-const PASSENGER_NAMES = [
-  "Ayesha Khan", "Bilal Ahmed", "Sara Malik", "Usman Tariq", "Hina Shah",
-  "Danish Iqbal", "Mahnoor Ali", "Fahad Sheikh", "Zara Baig", "Hamza Riaz",
+const PASSENGER_FIRST_NAMES = [
+  "Ayesha", "Bilal", "Sara", "Usman", "Hina", "Danish", "Mahnoor", "Fahad", "Zara", "Hamza",
+  "Bushra", "Hassan", "Mariam", "Kamran", "Sadia", "Omer", "Laiba", "Hassaan", "Anum", "Talha",
+  "Rukhsar", "Adnan", "Fatima", "Shoaib", "Yusra", "Kamil", "Areeba", "Shahzaib", "Aliza", "Mustafa",
 ]
+const PASSENGER_LAST_NAMES = [
+  "Khan", "Ahmed", "Malik", "Tariq", "Shah", "Iqbal", "Ali", "Sheikh", "Baig", "Riaz",
+  "Farooqi", "Chaudhry", "Bhatti", "Rana", "Qazi", "Dar", "Awan", "Gill", "Warraich", "Mirza",
+]
+/** 50 demo passenger names (Phase 3 §32 demo-mode scale) — deterministic so re-seeding is stable. */
+const PASSENGER_NAMES = Array.from({ length: 50 }, (_, i) => `${PASSENGER_FIRST_NAMES[i % PASSENGER_FIRST_NAMES.length]} ${PASSENGER_LAST_NAMES[(i * 7) % PASSENGER_LAST_NAMES.length]}`)
 
 const DRIVER_NAMES = [
   "Ahmed Raza", "Bilal Hussain", "Zainab Khan", "Kashif Mehmood", "Nadia Yousaf",
@@ -95,8 +102,16 @@ async function wipe() {
     "transaction", "commission", "payment",
     "rideStatusHistory", "rideLocation", "safetyEvent", "dispute", "supportTicket", "ride",
     "counterOffer", "rideOffer", "rideRequest",
+    "promoRedemption", "favoriteDriver",
+    "driverIncentiveProgress", "incentiveReward",
+    "scheduledRide",
+    "driverOnlineSession",
     "vehicleDocument", "vehicle", "driverDocument", "driverProfile",
     "wallet", "passengerProfile", "location",
+    "businessEmployee", "businessAccount",
+    "referral", "referralCode",
+    "riskEvent", "riskScore", "notificationPreference", "userBlock",
+    "incentiveCampaign",
     "refreshToken", "otpCode", "user",
     "fareRule", "cityVehicleType", "promotion", "serviceZone", "city", "country",
     "vehicleType", "platformSetting",
@@ -193,10 +208,12 @@ async function main() {
   })
   void opsAdminUser
 
-  console.log("[SEED] Creating 10 passengers...")
+  console.log(`[SEED] Creating ${PASSENGER_NAMES.length} passengers...`)
   const passengerPasswordHash = await bcrypt.hash(PASSENGER_PASSWORD, 10)
   const passengers = []
   for (let i = 0; i < PASSENGER_NAMES.length; i++) {
+    // A handful of passengers start with a wallet balance so the wallet UI has something to show on day one.
+    const startingBalance = i % 7 === 0 ? round2(200 + Math.random() * 800) : 0
     const user = await prisma.user.create({
       data: {
         fullName: PASSENGER_NAMES[i],
@@ -208,10 +225,17 @@ async function main() {
         primaryCityId: city.id,
         phoneVerifiedAt: new Date(),
         passengerProfile: { create: {} },
-        wallet: { create: { balance: 0, currencyCode: "PKR" } },
+        wallet: { create: { balance: startingBalance, currencyCode: "PKR" } },
       },
       include: { passengerProfile: true },
     })
+    if (startingBalance > 0) {
+      const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
+      await prisma.transaction.create({
+        data: { walletId: wallet.id, type: "wallet_topup", amount: startingBalance, balanceAfter: startingBalance, description: "[SEED] Initial wallet top-up" },
+      })
+    }
+    await prisma.referralCode.create({ data: { userId: user.id, code: `PSGR${String(i + 1).padStart(3, "0")}` } })
     passengers.push(user)
   }
 
@@ -279,6 +303,27 @@ async function main() {
       },
       include: { driverProfile: { include: { vehicles: true } } },
     })
+    await prisma.referralCode.create({ data: { userId: user.id, code: `DRVR${String(i + 1).padStart(3, "0")}` } })
+
+    // A few online-session rows spread over the last two weeks so the
+    // earnings-per-hour calculation has real elapsed time to divide by.
+    if (!isPendingVerification) {
+      const sessionCount = 3 + Math.floor(Math.random() * 5)
+      for (let s = 0; s < sessionCount; s++) {
+        const daysAgo = Math.floor(Math.random() * 14)
+        const startHour = 8 + Math.floor(Math.random() * 10)
+        const startedAt = new Date(Date.now() - daysAgo * 86_400_000)
+        startedAt.setHours(startHour, 0, 0, 0)
+        const durationHours = 2 + Math.random() * 5
+        const endedAt = new Date(startedAt.getTime() + durationHours * 3_600_000)
+        await prisma.driverOnlineSession.create({ data: { driverId: user.driverProfile!.id, startedAt, endedAt } })
+      }
+      // The currently-online drivers have one still-open session.
+      if (online) {
+        await prisma.driverOnlineSession.create({ data: { driverId: user.driverProfile!.id, startedAt: new Date(Date.now() - 45 * 60_000) } })
+      }
+    }
+
     drivers.push(user as never)
   }
 
@@ -290,11 +335,15 @@ async function main() {
   }
 
   // ---------------------------------------------------------------------
-  // Completed rides (8) — full lifecycle incl. payment, commission, wallet
-  // transaction, and ratings.
+  // Historical rides (110: ~90 completed, ~20 cancelled) spread over the
+  // last 45 days — full lifecycle incl. payment, commission, wallet
+  // transaction, ratings, and a realistic cancellation rate for the
+  // analytics/cohort endpoints to have something to compute (Phase 3 §32).
   // ---------------------------------------------------------------------
-  console.log("[SEED] Creating completed rides with payments and ratings...")
-  for (let i = 0; i < 8; i++) {
+  const HISTORICAL_RIDE_COUNT = 110
+  console.log(`[SEED] Creating ${HISTORICAL_RIDE_COUNT} historical rides with payments, ratings, and cancellations...`)
+  const favoriteCandidates: { passengerId: string; passengerUserId: string; driverId: string }[] = []
+  for (let i = 0; i < HISTORICAL_RIDE_COUNT; i++) {
     const passenger = passengers[i % passengers.length]
     const driver = pick(driverProfiles.filter((d) => d.verificationStatus === "approved"))
     const vehicle = driver.vehicles[0]
@@ -306,6 +355,13 @@ async function main() {
     const distanceKm = round2(3 + Math.random() * 15)
     const fare = round2(vt.base + distanceKm * vt.perKm)
     const bookingMode = i % 2 === 0 ? "quick_match" : "competitive_offer"
+    const isCancelled = i % 6 === 0 // ~17% cancellation rate — realistic demo signal, not a real-world benchmark
+    const cancelledByDriver = isCancelled && i % 2 === 0
+
+    // Spread across the last 45 days instead of the last few hours, so
+    // daily/weekly earnings charts and cohort windows have real spread.
+    const daysAgo = Math.floor(Math.random() * 45)
+    const acceptedAt = new Date(Date.now() - daysAgo * 86_400_000 - Math.floor(Math.random() * 12) * 3_600_000)
 
     const request = await prisma.rideRequest.create({
       data: {
@@ -320,18 +376,39 @@ async function main() {
         distanceKm,
         estDurationMin: Math.round(distanceKm * 2.2),
         status: "matched",
-        expiresAt: new Date(Date.now() - 3600_000),
+        createdAt: acceptedAt,
+        expiresAt: new Date(acceptedAt.getTime() + 3600_000),
       },
     })
     const offer = await prisma.rideOffer.create({
       data: {
         rideRequestId: request.id, driverId: driver.id, vehicleId: vehicle.id,
         offerPrice: fare, etaMin: 5, distanceKm, status: "accepted",
-        expiresAt: new Date(Date.now() - 3000_000),
+        createdAt: acceptedAt,
+        expiresAt: new Date(acceptedAt.getTime() + 600_000),
       },
     })
 
-    const acceptedAt = new Date(Date.now() - (8 - i) * 3600_000)
+    if (isCancelled) {
+      const cancelledAt = new Date(acceptedAt.getTime() + (2 + Math.random() * 6) * 60_000)
+      await prisma.ride.create({
+        data: {
+          rideRequestId: request.id, rideOfferId: offer.id,
+          passengerId: passenger.passengerProfile!.id, driverId: driver.id, vehicleId: vehicle.id,
+          pickupLocationId: pickup.id, destinationLocationId: destination.id,
+          agreedFare: fare, distanceKm,
+          status: cancelledByDriver ? "cancelled_by_driver" : "cancelled_by_passenger",
+          acceptedAt, cancelledAt, cancellationReason: "[SEED] Demo cancellation",
+          createdAt: acceptedAt,
+          shareToken: `seed-cancelled-${i}-${Date.now()}`,
+          statusHistory: { create: [{ status: "driver_selected", changedAt: acceptedAt }, { status: cancelledByDriver ? "cancelled_by_driver" : "cancelled_by_passenger", changedAt: cancelledAt }] },
+        },
+      })
+      await prisma.driverProfile.update({ where: { id: driver.id }, data: { cancelledRides: { increment: cancelledByDriver ? 1 : 0 } } })
+      await prisma.passengerProfile.update({ where: { id: passenger.passengerProfile!.id }, data: { cancelledRides: { increment: cancelledByDriver ? 0 : 1 } } })
+      continue
+    }
+
     const startedAt = new Date(acceptedAt.getTime() + 6 * 60_000)
     const durationMin = Math.round(distanceKm * 2.2)
     const completedAt = new Date(startedAt.getTime() + durationMin * 60_000)
@@ -344,6 +421,7 @@ async function main() {
         agreedFare: fare, finalFare: fare, distanceKm, durationMin,
         status: "ride_completed",
         acceptedAt, arrivedAt: new Date(acceptedAt.getTime() + 4 * 60_000), startedAt, completedAt,
+        createdAt: acceptedAt,
         shareToken: `seed-share-${i}-${Date.now()}`,
         statusHistory: {
           create: [
@@ -361,7 +439,7 @@ async function main() {
     const payment = await prisma.payment.create({
       data: {
         rideId: ride.id, method: i % 4 === 0 ? "card" : "cash", status: "captured",
-        amount: fare, currencyCode: "PKR", providerReference: `seed_pay_${i}`, capturedAt: completedAt,
+        amount: fare, currencyCode: "PKR", providerReference: `seed_pay_${i}`, capturedAt: completedAt, createdAt: completedAt,
       },
     })
     await prisma.commission.create({ data: { paymentId: payment.id, rate: 0.15, amount: commissionAmount } })
@@ -375,16 +453,24 @@ async function main() {
 
     await prisma.driverProfile.update({ where: { id: driver.id }, data: { completedRides: { increment: 1 } } })
     await prisma.passengerProfile.update({ where: { id: passenger.passengerProfile!.id }, data: { completedRides: { increment: 1 } } })
+    favoriteCandidates.push({ passengerId: passenger.passengerProfile!.id, passengerUserId: passenger.id, driverId: driver.id })
 
     // Passenger rates driver on most rides; driver rates passenger sometimes.
     const score = 4 + Math.round(Math.random())
     await prisma.rating.create({
-      data: { rideId: ride.id, raterId: passenger.id, rateeId: driver.userId, score,
+      data: { rideId: ride.id, raterId: passenger.id, rateeId: driver.userId, score, createdAt: completedAt,
         review: i % 3 === 0 ? { create: { comment: "[SEED] Great ride, smooth and on time." } } : undefined },
     })
     if (i % 2 === 0) {
-      await prisma.rating.create({ data: { rideId: ride.id, raterId: driver.userId, rateeId: passenger.id, score: 5 } })
+      await prisma.rating.create({ data: { rideId: ride.id, raterId: driver.userId, rateeId: passenger.id, score: 5, createdAt: completedAt } })
     }
+  }
+
+  // Recompute cancellationRate/ratingAvg roll-ups the way the app's own
+  // rating/status services would, since this loop bypassed those services.
+  for (const d of await prisma.driverProfile.findMany()) {
+    const total = d.completedRides + d.cancelledRides
+    if (total > 0) await prisma.driverProfile.update({ where: { id: d.id }, data: { cancellationRate: round2((d.cancelledRides / total) * 100) } })
   }
 
   // ---------------------------------------------------------------------
@@ -514,12 +600,159 @@ async function main() {
     data: { code: "RIVO100", description: "[SEED] Rs 100 off", discountType: "flat", discountValue: 100, cityId: city.id, createdById: superAdminUser.id },
   })
 
+  // A couple more tickets/disputes across statuses and categories, so the
+  // admin support/dispute queues show variety rather than a single row.
+  await prisma.supportTicket.create({
+    data: { userId: passengers[4].id, category: "pricing", subject: "[SEED] Fare seemed higher than the estimate", status: "waiting", priority: "low" },
+  })
+  await prisma.supportTicket.create({
+    data: { userId: drivers[5].id, category: "payment", subject: "[SEED] Missing payout for last week", status: "resolved", priority: "high", assignedAdminId: superAdminUser.id, resolvedAt: new Date() },
+  })
+  const secondDisputedRide = await prisma.ride.findFirst({ where: { status: "ride_completed" }, skip: 1 })
+  if (secondDisputedRide) {
+    await prisma.dispute.create({
+      data: {
+        rideId: secondDisputedRide.id, raisedById: passengers[5].id, reason: "[SEED] Requesting refund for cancelled portion",
+        status: "resolved", decision: "refund_passenger", resolution: "[SEED] Verified and refunded.", resolvedById: superAdminUser.id, resolvedAt: new Date(),
+      },
+    })
+  }
+
+  // ---------------------------------------------------------------------
+  // Favorite drivers — a handful of passengers who actually rode with
+  // that driver (Phase 3 §12: never fabricated, always backed by a real
+  // completed ride).
+  // ---------------------------------------------------------------------
+  console.log("[SEED] Creating favorite drivers, referrals, incentives, scheduled rides, business account, risk signals...")
+  const seenFavoritePairs = new Set<string>()
+  let favoritesCreated = 0
+  for (const c of favoriteCandidates) {
+    if (favoritesCreated >= 6) break
+    const key = `${c.passengerId}:${c.driverId}`
+    if (seenFavoritePairs.has(key)) continue
+    seenFavoritePairs.add(key)
+    await prisma.favoriteDriver.create({ data: { passengerId: c.passengerId, driverId: c.driverId } })
+    favoritesCreated++
+  }
+
+  // ---------------------------------------------------------------------
+  // Referrals — one pending (just applied, hasn't ridden yet) and one
+  // fully rewarded (mirrors what referralService.qualifyReferralOnFirstRide
+  // actually writes, so the demo data is consistent with real writes).
+  // ---------------------------------------------------------------------
+  const referrerCode = await prisma.referralCode.findUniqueOrThrow({ where: { userId: passengers[20].id } })
+  await prisma.referral.create({
+    data: { referrerUserId: passengers[20].id, referredUserId: passengers[21].id, code: referrerCode.code, status: "pending" },
+  })
+  const rewardedReferrerCode = await prisma.referralCode.findUniqueOrThrow({ where: { userId: passengers[22].id } })
+  await prisma.referral.create({
+    data: {
+      referrerUserId: passengers[22].id, referredUserId: passengers[23].id, code: rewardedReferrerCode.code, status: "rewarded",
+      qualifyingAction: "first_ride_completed", qualifiedAt: new Date(), rewardedAt: new Date(),
+      rewardAmountReferrer: 200, rewardAmountReferred: 100,
+    },
+  })
+
+  // ---------------------------------------------------------------------
+  // Driver incentive campaign — admin-configured target/reward, three
+  // drivers at different points of progress, one already rewarded.
+  // ---------------------------------------------------------------------
+  const campaign = await prisma.incentiveCampaign.create({
+    data: {
+      name: "[SEED] Weekend Rush Bonus", description: "[SEED] Complete 10 rides this weekend for a Rs 1000 bonus",
+      cityId: city.id, targetRideCount: 10, rewardAmount: 1000,
+      startDate: new Date(Date.now() - 2 * 86_400_000), endDate: new Date(Date.now() + 5 * 86_400_000), status: "active", createdById: superAdminUser.id,
+    },
+  })
+  const incentiveDrivers = driverProfiles.filter((d) => d.verificationStatus === "approved").slice(0, 4)
+  if (incentiveDrivers[0]) await prisma.driverIncentiveProgress.create({ data: { driverId: incentiveDrivers[0].id, campaignId: campaign.id, currentCount: 3, status: "in_progress" } })
+  if (incentiveDrivers[1]) await prisma.driverIncentiveProgress.create({ data: { driverId: incentiveDrivers[1].id, campaignId: campaign.id, currentCount: 7, status: "in_progress" } })
+  if (incentiveDrivers[2]) {
+    await prisma.driverIncentiveProgress.create({ data: { driverId: incentiveDrivers[2].id, campaignId: campaign.id, currentCount: 10, status: "rewarded" } })
+    await prisma.incentiveReward.create({ data: { driverId: incentiveDrivers[2].id, campaignId: campaign.id, amount: 1000 } })
+    const rewardedWallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: incentiveDrivers[2].userId } })
+    const newBal = round2(rewardedWallet.balance + 1000)
+    await prisma.wallet.update({ where: { id: rewardedWallet.id }, data: { balance: newBal } })
+    await prisma.transaction.create({ data: { walletId: rewardedWallet.id, type: "incentive_bonus", amount: 1000, balanceAfter: newBal, description: "[SEED] Weekend Rush Bonus reward" } })
+  }
+
+  // ---------------------------------------------------------------------
+  // Scheduled rides — two passengers with an upcoming booking.
+  // ---------------------------------------------------------------------
+  for (let i = 0; i < 2; i++) {
+    const passenger = passengers[30 + i]
+    const pickupPlace = place()
+    const destPlace = place()
+    const pickup = await createLocation(passenger.id, pickupPlace)
+    const destination = await createLocation(passenger.id, destPlace)
+    await prisma.scheduledRide.create({
+      data: {
+        passengerId: passenger.passengerProfile!.id, cityId: city.id, vehicleTypeId: vehicleTypes[i % vehicleTypes.length].id,
+        pickupLocationId: pickup.id, destinationLocationId: destination.id,
+        bookingMode: "quick_match", scheduledFor: new Date(Date.now() + (i + 1) * 6 * 3_600_000), status: "scheduled",
+      },
+    })
+  }
+
+  // ---------------------------------------------------------------------
+  // Business account — architecture-only (Phase 2 §14): a company with an
+  // owner + two employee passengers, and a couple of historical rides
+  // tagged to it so the member dashboard has something to show.
+  // ---------------------------------------------------------------------
+  const businessOwner = passengers[10]
+  const businessAccount = await prisma.businessAccount.create({
+    data: {
+      companyName: "[SEED] Acme Traders", billingContactUserId: businessOwner.id, cityId: city.id, paymentMethod: "wallet",
+      monthlySpendLimit: 50000,
+      employees: {
+        create: [
+          { userId: businessOwner.id, role: "owner" },
+          { userId: passengers[11].id, role: "member" },
+          { userId: passengers[12].id, role: "member" },
+        ],
+      },
+    },
+  })
+  const taggedRide = await prisma.ride.findFirst({ where: { status: "ride_completed", passenger: { userId: passengers[11].id } } })
+  if (taggedRide) {
+    await prisma.ride.update({ where: { id: taggedRide.id }, data: { businessAccountId: businessAccount.id } })
+    await prisma.rideRequest.update({ where: { id: taggedRide.rideRequestId }, data: { businessAccountId: businessAccount.id } })
+  }
+
+  // ---------------------------------------------------------------------
+  // Risk/fraud signals — demo entries for the manual review queue. These
+  // only ever surface a user for human review; nothing here suspends an
+  // account (Phase 3 §22).
+  // ---------------------------------------------------------------------
+  await prisma.riskEvent.create({
+    data: { userId: passengers[6].id, type: "unusual_cancellation", severity: "medium", details: JSON.stringify({ note: "[SEED] Elevated cancellation rate this week" }) },
+  })
+  await prisma.riskEvent.create({
+    data: { userId: drivers[7].id, type: "impossible_movement", severity: "high", details: JSON.stringify({ note: "[SEED] Implausible speed between two location pings" }) },
+  })
+  await prisma.riskScore.create({ data: { userId: passengers[6].id, score: 3 } })
+  await prisma.riskScore.create({ data: { userId: drivers[7].id, score: 7 } })
+
+  // One passenger has opted out of promotional notifications (never the
+  // non-disableable safety/system types).
+  await prisma.notificationPreference.create({ data: { userId: passengers[8].id, type: "promo", enabled: false } })
+
+  // A driver document nearing expiry (within the 30-day warning window)
+  // and one already expired, so the admin document-expiry queue isn't empty.
+  await prisma.driverDocument.create({
+    data: { driverId: drivers[8].driverProfile!.id, docType: "driving_license", fileUrl: "https://example.com/seed/license-renewal.jpg", status: "approved", expiresAt: new Date(Date.now() + 20 * 86_400_000) },
+  })
+  await prisma.driverDocument.create({
+    data: { driverId: drivers[9].driverProfile!.id, docType: "insurance", fileUrl: "https://example.com/seed/insurance-old.pdf", status: "approved", expiresAt: new Date(Date.now() - 3 * 86_400_000) },
+  })
+
   console.log("\n[SEED] Done.\n")
   console.log("Test accounts (all seed/demo data):")
-  console.log(`  Passenger: +923001000001 / ${PASSENGER_PASSWORD}  (any of +923001000001 .. +923001000010)`)
+  console.log(`  Passenger: +923001000001 / ${PASSENGER_PASSWORD}  (any of +923001000001 .. +923001000${String(PASSENGER_NAMES.length).padStart(3, "0")})`)
   console.log(`  Driver:    +923002000001 / ${DRIVER_PASSWORD}     (any of +923002000001 .. +923002000030; last 5 are pending verification)`)
   console.log(`  Admin (super_admin): +923000000001 / ${ADMIN_PASSWORD}`)
   console.log(`  Admin (ops_manager): +923000000002 / ${ADMIN_PASSWORD}`)
+  console.log(`\n  ${PASSENGER_NAMES.length} passengers, ${DRIVER_NAMES.length} drivers, ${HISTORICAL_RIDE_COUNT} historical rides, plus favorites, referrals, incentives, a scheduled ride, a business account, and risk/document-expiry demo entries.`)
 }
 
 main()
