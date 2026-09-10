@@ -19,4 +19,15 @@ export const adminApi = {
     api.post<{ driverProfile: unknown }>(`/admin/drivers/${driverId}/verify`, { decision, reason }),
   auditLogs: (query?: { page?: number; pageSize?: number }) => api.get<{ logs: unknown[]; total: number }>("/admin/audit-logs", query),
   settings: () => api.get<{ settings: Record<string, unknown>; defaults: Record<string, unknown> }>("/admin/settings"),
+  liveOpsSummary: (cityId?: string) =>
+    api.get<{
+      activeRides: number
+      pendingRequests: number
+      onlineDrivers: number
+      staleLocationDrivers: number
+      cancellationsInWindow: number
+      openSafetyIncidents: number
+      openDisputes: number
+      openSupportTickets: number
+    }>("/admin/live-ops/summary", cityId ? { cityId } : undefined),
 }

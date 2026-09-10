@@ -28,10 +28,14 @@ export function createApp() {
 
   app.get("/health", (_req, res) => res.json({ ok: true, service: "rivo-backend", env: env.nodeEnv }))
 
+  // More specific mounts must come before the bare "/v1" mount below —
+  // Express matches app.use() prefixes in registration order, and
+  // ridesRouter's blanket `requireAuth` would otherwise intercept every
+  // request under "/v1/*" (including the intentionally unauthenticated
+  // /v1/public/* routes) before it ever reaches its real router.
   app.use("/v1/auth", authRouter)
   app.use("/v1/passenger", passengerRouter)
   app.use("/v1/driver", driverRouter)
-  app.use("/v1", ridesRouter) // /ride-requests, /ride-offers, /counter-offers, /rides, /fare-estimates
   app.use("/v1/admin", adminRouter)
   app.use("/v1/safety", safetyRouter)
   app.use("/v1/public", publicSafetyRouter)
@@ -40,6 +44,7 @@ export function createApp() {
   app.use("/v1/account", accountRouter)
   app.use("/v1/business", businessRouter)
   app.use("/v1/support", supportRouter)
+  app.use("/v1", ridesRouter) // /ride-requests, /ride-offers, /counter-offers, /rides, /fare-estimates
 
   app.use(notFoundHandler)
   app.use(errorHandler)

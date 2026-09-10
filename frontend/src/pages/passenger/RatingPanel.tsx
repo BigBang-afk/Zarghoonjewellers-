@@ -1,13 +1,25 @@
 import { useState } from "react"
-import { Star } from "lucide-react"
+import { Star, Heart } from "lucide-react"
 import { Card } from "../../components/ui/Card"
 import { Button } from "../../components/ui/Button"
 import { ridesApi } from "../../api/rides"
+import { passengerApi } from "../../api/passenger"
 import { useToast, errorMessage } from "../../shared/Toast"
 
-export function RatingPanel({ rideId, driverName, onDone }: { rideId: string; driverName: string; onDone: () => void }) {
+export function RatingPanel({
+  rideId,
+  driverName,
+  driverId,
+  onDone,
+}: {
+  rideId: string
+  driverName: string
+  driverId: string | null
+  onDone: () => void
+}) {
   const [score, setScore] = useState(5)
   const [comment, setComment] = useState("")
+  const [saveFavorite, setSaveFavorite] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const { push } = useToast()
 
@@ -15,6 +27,9 @@ export function RatingPanel({ rideId, driverName, onDone }: { rideId: string; dr
     setSubmitting(true)
     try {
       await ridesApi.submitRating(rideId, score, comment || undefined)
+      if (saveFavorite && driverId) {
+        await passengerApi.addFavorite(driverId).catch(() => {})
+      }
       push("success", "Thanks for your feedback!")
       onDone()
     } catch (err) {
@@ -42,6 +57,15 @@ export function RatingPanel({ rideId, driverName, onDone }: { rideId: string; dr
           placeholder="Leave a comment (optional)"
           className="mt-4 h-20 w-full resize-none rounded-xl border border-ink-900/10 p-3 text-sm outline-none focus:border-rivo-500"
         />
+        {driverId && (
+          <button
+            onClick={() => setSaveFavorite((v) => !v)}
+            className={`mt-3 flex w-full items-center gap-2 rounded-xl border p-3 text-left transition-colors ${saveFavorite ? "border-rivo-600 bg-rivo-600/[0.06]" : "border-ink-900/10"}`}
+          >
+            <Heart className={`h-4 w-4 ${saveFavorite ? "fill-rivo-600 text-rivo-600" : "text-ink-700/40"}`} />
+            <span className="text-sm font-semibold">Save {driverName} as a favorite driver</span>
+          </button>
+        )}
         <Button fullWidth size="lg" className="mt-4" onClick={submit} disabled={submitting}>
           {submitting ? "Submitting…" : "Submit rating"}
         </Button>

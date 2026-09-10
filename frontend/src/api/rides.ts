@@ -25,14 +25,20 @@ export const ridesApi = {
     bookingMode: BookingMode
     proposedFare?: number
     paymentMethod?: string
+    promoCode?: string
+    preferFavoriteDriver?: boolean
   }) => api.post<CreateRideRequestResult>("/ride-requests", input),
 
   getRequest: (id: string) => api.get<{ request: Record<string, unknown> }>(`/ride-requests/${id}`),
   cancelRequest: (id: string) => api.delete<{ ok: boolean }>(`/ride-requests/${id}`),
   getOffers: (id: string) =>
-    api.get<{ request: { id: string; status: string; proposedFare: number; suggestedFare: number }; offers: DriverOfferSummary[] }>(
-      `/ride-requests/${id}/offers`,
-    ),
+    api.get<{
+      request: { id: string; status: string; proposedFare: number; suggestedFare: number }
+      statusMessage: string
+      pendingCount: number
+      respondedCount: number
+      offers: DriverOfferSummary[]
+    }>(`/ride-requests/${id}/offers`),
   selectOffer: (rideRequestId: string, offerId: string) => api.post<{ ride: RideSummary }>(`/ride-requests/${rideRequestId}/select-offer`, { offerId }),
 
   acceptCounterOffer: (counterOfferId: string) => api.post<{ ride: RideSummary }>(`/counter-offers/${counterOfferId}/accept`),

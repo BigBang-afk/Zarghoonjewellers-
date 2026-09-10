@@ -1,5 +1,5 @@
 import { api } from "./client"
-import type { DriverEarningsSummary, IncomingRequestSummary, RideSummary } from "../types"
+import type { DriverEarningsSummary, DriverIncentiveSummary, IncomingRequestSummary, RideSummary } from "../types"
 
 export const driverApi = {
   me: () => api.get<{ driverProfile: Record<string, unknown> }>("/driver/me"),
@@ -10,4 +10,5 @@ export const driverApi = {
   earnings: () => api.get<DriverEarningsSummary>("/driver/me/earnings"),
   transactions: () => api.get<{ transactions: unknown[] }>("/driver/me/transactions"),
   rideHistory: () => api.get<{ rides: unknown[] }>("/driver/ride-history"),
+  incentives: () => api.get<DriverIncentiveSummary>("/driver/me/incentives"),
 }

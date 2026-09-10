@@ -107,15 +107,17 @@ export function AdminDashboard() {
   const [kpis, setKpis] = useState<AdminKpis | null>(null)
   const [cities, setCities] = useState<(City & { _count: { driverProfiles: number; serviceZones: number } })[]>([])
   const [mapDrivers, setMapDrivers] = useState<{ id: string; status: string; lat: number; lng: number }[]>([])
+  const [liveOps, setLiveOps] = useState<Awaited<ReturnType<typeof adminApi.liveOpsSummary>> | null>(null)
   const [error, setError] = useState(false)
 
   async function loadDashboard() {
     setError(false)
     try {
-      const [k, c, m] = await Promise.all([adminApi.kpis(), adminApi.cities(), adminApi.liveMap()])
+      const [k, c, m, ops] = await Promise.all([adminApi.kpis(), adminApi.cities(), adminApi.liveMap(), adminApi.liveOpsSummary()])
       setKpis(k)
       setCities(c.cities)
       setMapDrivers(m.drivers)
+      setLiveOps(ops)
     } catch (err) {
       setError(true)
       push("error", errorMessage(err))
@@ -205,6 +207,22 @@ export function AdminDashboard() {
                   </button>
                 )}
               </div>
+
+              {liveOps && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {[
+                    { label: `${liveOps.openSafetyIncidents} open safety incidents`, tone: liveOps.openSafetyIncidents > 0 ? "danger" : "neutral" },
+                    { label: `${liveOps.openDisputes} open disputes`, tone: liveOps.openDisputes > 0 ? "warning" : "neutral" },
+                    { label: `${liveOps.openSupportTickets} open tickets`, tone: liveOps.openSupportTickets > 0 ? "warning" : "neutral" },
+                    { label: `${liveOps.staleLocationDrivers} stale-location drivers`, tone: liveOps.staleLocationDrivers > 0 ? "warning" : "neutral" },
+                    { label: `${liveOps.cancellationsInWindow} cancellations (24h)`, tone: "neutral" },
+                  ].map((b) => (
+                    <Badge key={b.label} tone={b.tone as "danger" | "warning" | "neutral"} dot>
+                      {b.label}
+                    </Badge>
+                  ))}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {[

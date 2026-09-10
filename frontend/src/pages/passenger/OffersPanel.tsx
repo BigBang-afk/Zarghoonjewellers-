@@ -21,14 +21,16 @@ export function OffersPanel({
   onCancelled: () => void
 }) {
   const [offers, setOffers] = useState<DriverOfferSummary[]>([])
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>("price")
   const [busyId, setBusyId] = useState<string | null>(null)
   const { push } = useToast()
 
   async function refresh() {
     try {
-      const { offers } = await ridesApi.getOffers(rideRequestId)
+      const { offers, statusMessage } = await ridesApi.getOffers(rideRequestId)
       setOffers(offers)
+      setStatusMessage(statusMessage)
     } catch (err) {
       push("error", errorMessage(err))
     }
@@ -94,7 +96,7 @@ export function OffersPanel({
       <div className="mb-3 flex items-center justify-between">
         <div>
           <p className="font-display text-lg font-bold">Available drivers</p>
-          <p className="text-xs text-ink-700/60">{offers.length} {offers.length === 1 ? "offer" : "offers"} so far — waiting for more</p>
+          <p className="text-xs text-ink-700/60">{statusMessage ?? `${offers.length} ${offers.length === 1 ? "offer" : "offers"} so far`}</p>
         </div>
         <button onClick={cancel} className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-900/[0.05]">
           <X className="h-4 w-4" />

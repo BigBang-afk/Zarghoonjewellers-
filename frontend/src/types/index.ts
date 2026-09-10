@@ -41,6 +41,10 @@ export interface FareEstimate {
     minimumFare: number
     maximumFare: number | null
     commissionRate: number
+    /** Phase 3 §3 — a labeled estimate range, never presented as a locked-in price. */
+    typicalRangeLow: number
+    typicalRangeHigh: number
+    isEstimate: true
   }
 }
 
@@ -115,7 +119,7 @@ export interface RideSummary {
   paymentMethod: string
   shareToken: string | null
   passenger: { userId: string; user: PublicUser }
-  driver: { userId: string; user: PublicUser; ratingAvg?: number }
+  driver: { id: string; userId: string; user: PublicUser; ratingAvg?: number }
   vehicle: { make: string; model: string; color: string | null; plateNumber: string }
   pickup: { address: string; lat: number; lng: number }
   destination: { address: string; lat: number; lng: number }
@@ -137,9 +141,45 @@ export interface DriverEarningsSummary {
   today: { totalRs: number; rides: number; averageFareRs: number }
   week: { totalRs: number; rides: number; averageFareRs: number }
   month: { totalRs: number; rides: number; averageFareRs: number }
+  charts: {
+    daily: { label: string; totalRs: number; rides: number }[]
+    weekly: { label: string; totalRs: number; rides: number }[]
+    monthly: { label: string; totalRs: number; rides: number }[]
+  }
+  earningsPerHourRs: number
   completedRides: number
+  cancelledRides: number
   acceptanceRate: number
+  cancellationRate: number
   rating: number
+}
+
+export interface DriverIncentiveSummary {
+  activeProgress: {
+    id: string
+    currentCount: number
+    status: string
+    campaign: { id: string; name: string; description: string | null; targetRideCount: number; rewardAmount: number; endDate: string }
+  }[]
+  recentRewards: { id: string; amount: number; awardedAt: string; campaignId: string }[]
+}
+
+export interface WalletTransaction {
+  id: string
+  type: string
+  amount: number
+  balanceAfter: number
+  description: string | null
+  createdAt: string
+}
+
+export interface FavoriteDriverSummary {
+  id: string
+  driverId: string
+  name: string
+  rating: number
+  vehicle: string | null
+  addedAt: string
 }
 
 export interface AdminKpis {

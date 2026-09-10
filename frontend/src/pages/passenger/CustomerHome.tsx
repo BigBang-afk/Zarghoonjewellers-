@@ -29,8 +29,9 @@ import { SearchingPanel } from "./SearchingPanel"
 import { OffersPanel } from "./OffersPanel"
 import { LiveRidePanel } from "./LiveRidePanel"
 import { RatingPanel } from "./RatingPanel"
+import { WalletPanel } from "./WalletPanel"
 
-type View = "home" | "searching" | "offers" | "live" | "rating"
+type View = "home" | "searching" | "offers" | "live" | "rating" | "wallet"
 
 export function CustomerHome() {
   const { user } = useAuth()
@@ -50,11 +51,15 @@ export function CustomerHome() {
   const [mode, setMode] = useState<"quick" | "custom" | null>(null)
   const [customFare, setCustomFare] = useState(0)
   const [submitting, setSubmitting] = useState(false)
+  const [promoCode, setPromoCode] = useState("")
+  const [promoStatus, setPromoStatus] = useState<{ ok: boolean; message: string } | null>(null)
+  const [checkingPromo, setCheckingPromo] = useState(false)
 
   const [view, setView] = useState<View>("home")
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null)
   const [activeRideId, setActiveRideId] = useState<string | null>(null)
   const [lastDriverName, setLastDriverName] = useState("your driver")
+  const [lastDriverId, setLastDriverId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -83,6 +88,8 @@ export function CustomerHome() {
   async function chooseDestination(place: Place) {
     setDestination(place)
     setMode(null)
+    setPromoCode("")
+    setPromoStatus(null)
     if (!city) return
     setLoadingFares(true)
     try {
@@ -108,6 +115,25 @@ export function CustomerHome() {
 
   const selectedFare = fareByVehicle[vehicleTypeId]
 
+  async function checkPromo() {
+    if (!city || !promoCode.trim() || !selectedFare) return
+    setCheckingPromo(true)
+    setPromoStatus(null)
+    try {
+      const result = await passengerApi.validatePromo({
+        code: promoCode.trim(),
+        cityId: city.id,
+        vehicleTypeId,
+        fareAmount: mode === "custom" ? customFare : selectedFare.suggestedFare,
+      })
+      setPromoStatus({ ok: true, message: `Rs ${result.discountAmount} off applied` })
+    } catch (err) {
+      setPromoStatus({ ok: false, message: errorMessage(err) })
+    } finally {
+      setCheckingPromo(false)
+    }
+  }
+
   async function confirmBooking() {
     if (!city || !destination || !mode) return
     setSubmitting(true)
@@ -120,6 +146,7 @@ export function CustomerHome() {
         bookingMode: mode === "quick" ? "quick_match" : "competitive_offer",
         proposedFare: mode === "custom" ? customFare : undefined,
         paymentMethod: "cash",
+        promoCode: promoStatus?.ok ? promoCode.trim() : undefined,
       })
       setActiveRequestId(result.request.id)
       if (result.dispatch.status === "no_drivers") {
@@ -145,7 +172,10 @@ export function CustomerHome() {
 
   function onRideBooked(rideId: string) {
     setActiveRideId(rideId)
-    ridesApi.getRide(rideId).then(({ ride }) => setLastDriverName(ride.driver.user.fullName)).catch(() => {})
+    ridesApi.getRide(rideId).then(({ ride }) => {
+      setLastDriverName(ride.driver.user.fullName)
+      setLastDriverId(ride.driver.id)
+    }).catch(() => {})
     setView("live")
   }
 
@@ -159,7 +189,10 @@ export function CustomerHome() {
           <OffersPanel rideRequestId={activeRequestId} onBooked={onRideBooked} onCancelled={resetToHome} />
         )}
         {view === "live" && activeRideId && <LiveRidePanel rideId={activeRideId} onCompleted={() => setView("rating")} />}
-        {view === "rating" && activeRideId && <RatingPanel rideId={activeRideId} driverName={lastDriverName} onDone={resetToHome} />}
+        {view === "rating" && activeRideId && (
+          <RatingPanel rideId={activeRideId} driverName={lastDriverName} driverId={lastDriverId} onDone={resetToHome} />
+        )}
+        {view === "wallet" && <WalletPanel onClose={() => setView("home")} />}
 
         {view === "home" &&
           (loadingRefData ? (
@@ -282,6 +315,10 @@ export function CustomerHome() {
                           </button>
                         </div>
 
+                        <p className="mt-2 text-[11px] text-ink-700/50">
+                          Estimate only · typically Rs {selectedFare.typicalRangeLow}–{selectedFare.typicalRangeHigh}
+                        </p>
+
                         {mode === "custom" && (
                           <Card className="mt-3 flex items-center justify-between p-4">
                             <div>
@@ -299,6 +336,27 @@ export function CustomerHome() {
                             </div>
                           </Card>
                         )}
+
+                        {mode && (
+                          <div className="mt-3">
+                            <div className="flex items-center gap-2">
+                              <input
+                                value={promoCode}
+                                onChange={(e) => { setPromoCode(e.target.value.toUpperCase()); setPromoStatus(null) }}
+                                placeholder="Promo code"
+                                className="h-10 flex-1 rounded-xl border border-ink-900/10 bg-white px-3 text-sm font-semibold uppercase outline-none focus:border-rivo-600"
+                              />
+                              <Button size="sm" variant="secondary" onClick={checkPromo} disabled={!promoCode.trim() || checkingPromo}>
+                                {checkingPromo ? "…" : "Apply"}
+                              </Button>
+                            </div>
+                            {promoStatus && (
+                              <p className={`mt-1.5 text-xs font-semibold ${promoStatus.ok ? "text-success-600" : "text-danger-600"}`}>
+                                {promoStatus.message}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -315,12 +373,12 @@ export function CustomerHome() {
 
               <div className="absolute inset-x-0 bottom-0 flex items-center justify-around border-t border-ink-900/[0.06] bg-white/95 py-3 backdrop-blur">
                 {[
-                  { icon: HomeIcon, label: "Home", active: true },
-                  { icon: Clock, label: "Activity" },
-                  { icon: Wallet, label: "Wallet" },
-                  { icon: User, label: "Profile" },
+                  { icon: HomeIcon, label: "Home", active: true, onClick: () => {} },
+                  { icon: Clock, label: "Activity", onClick: () => {} },
+                  { icon: Wallet, label: "Wallet", onClick: () => setView("wallet") },
+                  { icon: User, label: "Profile", onClick: () => {} },
                 ].map((t) => (
-                  <button key={t.label} className={`flex flex-col items-center gap-0.5 ${t.active ? "text-rivo-600" : "text-ink-700/50"}`}>
+                  <button key={t.label} onClick={t.onClick} className={`flex flex-col items-center gap-0.5 ${t.active ? "text-rivo-600" : "text-ink-700/50"}`}>
                     <t.icon className="h-5 w-5" />
                     <span className="text-[10px] font-semibold">{t.label}</span>
                   </button>
