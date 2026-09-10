@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "../../utils/prisma.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
+import { requireAdminRole } from "../../middleware/auth.js"
 import { ApiError } from "../../utils/apiError.js"
 import { writeAuditLog } from "../../shared/audit.js"
 import { requestMoreInfo, refundDispute, adjustDriverPayout, closeDispute } from "../../services/disputeService.js"
@@ -41,6 +42,7 @@ adminTrustRouter.get(
  */
 adminTrustRouter.post(
   "/disputes/:id/request-info",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(z.object({ message: z.string().trim().min(1).max(500) })),
   asyncHandler(async (req, res) => {
     const dispute = await requestMoreInfo(req.params.id, req.auth!.userId, req.body.message)
@@ -51,6 +53,7 @@ adminTrustRouter.post(
 
 adminTrustRouter.post(
   "/disputes/:id/refund",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(z.object({ amountRs: z.number().positive().optional(), resolution: z.string().trim().min(1).max(500) })),
   asyncHandler(async (req, res) => {
     const dispute = await refundDispute(req.params.id, req.auth!.userId, req.body.amountRs, req.body.resolution)
@@ -61,6 +64,7 @@ adminTrustRouter.post(
 
 adminTrustRouter.post(
   "/disputes/:id/adjust",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(z.object({ amountRs: z.number(), resolution: z.string().trim().min(1).max(500) })),
   asyncHandler(async (req, res) => {
     const dispute = await adjustDriverPayout(req.params.id, req.auth!.userId, req.body.amountRs, req.body.resolution)
@@ -71,6 +75,7 @@ adminTrustRouter.post(
 
 adminTrustRouter.post(
   "/disputes/:id/close",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(z.object({ resolution: z.string().trim().min(1).max(500), status: z.enum(["closed", "rejected"]).default("closed") })),
   asyncHandler(async (req, res) => {
     const dispute = await closeDispute(req.params.id, req.auth!.userId, req.body.resolution, req.body.status)
@@ -99,6 +104,7 @@ adminTrustRouter.get(
 
 adminTrustRouter.patch(
   "/support-tickets/:id",
+  requireAdminRole("super_admin", "ops_manager", "support_agent"),
   validateBody(
     z.object({
       status: z.enum(["open", "in_progress", "resolved", "closed"]).optional(),
@@ -147,6 +153,7 @@ adminTrustRouter.get(
 
 adminTrustRouter.post(
   "/safety-events/:id/resolve",
+  requireAdminRole("super_admin", "ops_manager", "safety_officer"),
   asyncHandler(async (req, res) => {
     const event = await prisma.safetyEvent.findUnique({ where: { id: req.params.id } })
     if (!event) throw ApiError.notFound("Safety event not found.")

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "../../utils/prisma.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
+import { requireAdminRole } from "../../middleware/auth.js"
 import { ApiError } from "../../utils/apiError.js"
 import { writeAuditLog } from "../../shared/audit.js"
 import { getAllSettings, setSetting, SETTINGS_DEFAULTS, type PlatformSettingsShape } from "../../config/settings.js"
@@ -26,6 +27,7 @@ adminConfigRouter.get(
 
 adminConfigRouter.post(
   "/cities",
+  requireAdminRole("super_admin", "ops_manager"),
   validateBody(
     z.object({
       countryId: z.string().uuid(),
@@ -46,6 +48,7 @@ adminConfigRouter.post(
 
 adminConfigRouter.patch(
   "/cities/:id",
+  requireAdminRole("super_admin", "ops_manager"),
   validateBody(
     z.object({
       status: z.enum(["planned", "launching", "live", "paused"]).optional(),
@@ -78,6 +81,7 @@ adminConfigRouter.get(
 
 adminConfigRouter.post(
   "/vehicle-types",
+  requireAdminRole("super_admin", "ops_manager"),
   validateBody(
     z.object({
       code: z.string().trim().min(1).max(30),
@@ -97,6 +101,7 @@ adminConfigRouter.post(
 
 adminConfigRouter.patch(
   "/vehicle-types/:id",
+  requireAdminRole("super_admin", "ops_manager"),
   validateBody(
     z.object({
       name: z.string().trim().min(1).max(60).optional(),
@@ -116,6 +121,7 @@ adminConfigRouter.patch(
 
 adminConfigRouter.put(
   "/cities/:cityId/vehicle-types/:vehicleTypeId",
+  requireAdminRole("super_admin", "ops_manager"),
   validateBody(z.object({ isActive: z.boolean() })),
   asyncHandler(async (req, res) => {
     const link = await prisma.cityVehicleType.upsert({
@@ -139,6 +145,7 @@ adminConfigRouter.get(
 
 adminConfigRouter.post(
   "/service-zones",
+  requireAdminRole("super_admin", "ops_manager"),
   validateBody(z.object({ cityId: z.string().uuid(), name: z.string().trim().min(1).max(60), boundaryGeoJson: z.string() })),
   asyncHandler(async (req, res) => {
     const zone = await prisma.serviceZone.create({ data: req.body })
@@ -180,6 +187,7 @@ adminConfigRouter.get(
 
 adminConfigRouter.post(
   "/pricing/fare-rules",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(fareRuleSchema),
   asyncHandler(async (req, res) => {
     const rule = await prisma.fareRule.create({ data: { ...req.body, createdById: req.auth!.userId } })
@@ -190,6 +198,7 @@ adminConfigRouter.post(
 
 adminConfigRouter.put(
   "/pricing/fare-rules/:id",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(fareRuleSchema.partial()),
   asyncHandler(async (req, res) => {
     const before = await prisma.fareRule.findUnique({ where: { id: req.params.id } })
@@ -214,6 +223,7 @@ adminConfigRouter.get(
 
 adminConfigRouter.put(
   "/settings/:key",
+  requireAdminRole("super_admin"),
   validateBody(z.object({ value: z.union([z.number(), z.array(z.number())]), description: z.string().optional() })),
   asyncHandler(async (req, res) => {
     const key = req.params.key as keyof PlatformSettingsShape
@@ -259,6 +269,7 @@ adminConfigRouter.get(
 
 adminConfigRouter.post(
   "/promotions",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(promotionSchema),
   asyncHandler(async (req, res) => {
     const existing = await prisma.promotion.findUnique({ where: { code: req.body.code } })
@@ -271,6 +282,7 @@ adminConfigRouter.post(
 
 adminConfigRouter.put(
   "/promotions/:id",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(promotionSchema.partial().extend({ isActive: z.boolean().optional() })),
   asyncHandler(async (req, res) => {
     const before = await prisma.promotion.findUnique({ where: { id: req.params.id } })
@@ -310,6 +322,7 @@ adminConfigRouter.get(
 
 adminConfigRouter.post(
   "/incentive-campaigns",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(incentiveCampaignSchema),
   asyncHandler(async (req, res) => {
     if (req.body.endDate <= req.body.startDate) throw ApiError.badRequest("INVALID_DATE_RANGE", "endDate must be after startDate.")
@@ -321,6 +334,7 @@ adminConfigRouter.post(
 
 adminConfigRouter.put(
   "/incentive-campaigns/:id",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(incentiveCampaignSchema.partial().extend({ status: z.enum(["draft", "active", "ended"]).optional() })),
   asyncHandler(async (req, res) => {
     const before = await prisma.incentiveCampaign.findUnique({ where: { id: req.params.id } })

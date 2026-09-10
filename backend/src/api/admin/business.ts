@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "../../utils/prisma.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
+import { requireAdminRole } from "../../middleware/auth.js"
 import { ApiError } from "../../utils/apiError.js"
 import { writeAuditLog } from "../../shared/audit.js"
 
@@ -25,6 +26,7 @@ adminBusinessRouter.get(
 
 adminBusinessRouter.post(
   "/business-accounts",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(
     z.object({
       companyName: z.string().trim().min(2).max(100),
@@ -45,6 +47,7 @@ adminBusinessRouter.post(
 
 adminBusinessRouter.post(
   "/business-accounts/:id/employees",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
   validateBody(z.object({ userId: z.string().uuid(), role: z.enum(["owner", "member"]).default("member") })),
   asyncHandler(async (req, res) => {
     const account = await prisma.businessAccount.findUnique({ where: { id: req.params.id } })

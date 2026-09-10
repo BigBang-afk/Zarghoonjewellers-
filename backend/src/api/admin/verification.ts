@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "../../utils/prisma.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
+import { requireAdminRole } from "../../middleware/auth.js"
 import { ApiError } from "../../utils/apiError.js"
 import { writeAuditLog } from "../../shared/audit.js"
 import { notify } from "../../services/notifications/NotificationService.js"
@@ -24,6 +25,7 @@ adminVerificationRouter.get(
 
 adminVerificationRouter.post(
   "/drivers/:id/verify",
+  requireAdminRole("super_admin", "ops_manager", "safety_officer"),
   validateBody(z.object({ decision: z.enum(["approve", "reject"]), reason: z.string().trim().max(300).optional() })),
   asyncHandler(async (req, res) => {
     const driver = await prisma.driverProfile.findUnique({ where: { id: req.params.id }, include: { user: true, vehicles: true } })
@@ -88,6 +90,7 @@ adminVerificationRouter.get(
 
 adminVerificationRouter.post(
   "/driver-documents/:id/review",
+  requireAdminRole("super_admin", "ops_manager", "safety_officer"),
   validateBody(z.object({ decision: z.enum(["approve", "reject"]), reason: z.string().trim().max(300).optional() })),
   asyncHandler(async (req, res) => {
     const doc = await prisma.driverDocument.findUnique({ where: { id: req.params.id } })

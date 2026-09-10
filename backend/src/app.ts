@@ -4,6 +4,7 @@ import helmet from "helmet"
 import { env } from "./config/env.js"
 import { generalRateLimit } from "./middleware/rateLimit.js"
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js"
+import { sanitizeResponse } from "./middleware/sanitizeResponse.js"
 import { authRouter } from "./api/auth/router.js"
 import { passengerRouter } from "./api/passenger/router.js"
 import { driverRouter } from "./api/driver/router.js"
@@ -23,6 +24,7 @@ export function createApp() {
   app.use(cors({ origin: env.corsOrigin, credentials: true }))
   app.use(express.json({ limit: "1mb" }))
   app.use(generalRateLimit)
+  app.use(sanitizeResponse)
 
   app.get("/health", (_req, res) => res.json({ ok: true, service: "rivo-backend", env: env.nodeEnv }))
 

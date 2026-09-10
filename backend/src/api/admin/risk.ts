@@ -3,6 +3,7 @@ import { z } from "zod"
 import { prisma } from "../../utils/prisma.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
+import { requireAdminRole } from "../../middleware/auth.js"
 import { ApiError } from "../../utils/apiError.js"
 import { writeAuditLog } from "../../shared/audit.js"
 import { recomputeRiskScore } from "../../services/riskService.js"
@@ -24,6 +25,7 @@ function pagination(query: Record<string, unknown>) {
 
 adminRiskRouter.get(
   "/risk/queue",
+  requireAdminRole("super_admin", "ops_manager", "safety_officer", "finance", "read_only"),
   asyncHandler(async (req, res) => {
     const { minScore = "1" } = req.query as Record<string, string>
     const { take, skip, page } = pagination(req.query as Record<string, unknown>)
@@ -44,6 +46,7 @@ adminRiskRouter.get(
 
 adminRiskRouter.get(
   "/risk/users/:userId",
+  requireAdminRole("super_admin", "ops_manager", "safety_officer", "finance", "read_only"),
   asyncHandler(async (req, res) => {
     const [score, events, user] = await Promise.all([
       prisma.riskScore.findUnique({ where: { userId: req.params.userId } }),
@@ -57,6 +60,7 @@ adminRiskRouter.get(
 
 adminRiskRouter.post(
   "/risk/events/:id/review",
+  requireAdminRole("super_admin", "ops_manager", "safety_officer"),
   validateBody(z.object({ note: z.string().trim().max(300).optional() })),
   asyncHandler(async (req, res) => {
     const event = await prisma.riskEvent.findUnique({ where: { id: req.params.id } })
@@ -75,6 +79,7 @@ adminRiskRouter.post(
  */
 adminRiskRouter.patch(
   "/users/:id/status",
+  requireAdminRole("super_admin", "ops_manager", "safety_officer"),
   validateBody(z.object({ status: z.enum(["active", "suspended", "banned"]), reason: z.string().trim().min(1).max(300) })),
   asyncHandler(async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } })
