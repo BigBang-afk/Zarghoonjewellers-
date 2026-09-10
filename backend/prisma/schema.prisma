@@ -639,7 +639,20 @@ model Promotion {
   minFare         Float?
   cityId          String?
   vehicleTypeId   String?
+  /// true = this ride must be the passenger's literal first ride ever (Phase 5 §9 "first-ride")
   newUsersOnly    Boolean  @default(false)
+  /// true = only passengers with at least one completed ride already — the inverse targeting to newUsersOnly (Phase 5 §9 "new-or-existing")
+  existingUsersOnly Boolean @default(false)
+  /// Segment by completed-ride count range, e.g. a loyalty tier (Phase 5 §9 "ride-count") — independent of newUsersOnly/existingUsersOnly.
+  minCompletedRides Int?
+  maxCompletedRides Int?
+  /// Only apply for passengers acquired via this User.acquisitionSource value (Phase 5 §9 "referral-source")
+  requiredAcquisitionSource String?
+  /// JSON-encoded array of allowed weekdays, 0 (Sun) - 6 (Sat); null = every day (Phase 5 §9 "day-of-week")
+  daysOfWeek      String?
+  /// Local-hour window [startHour, endHour) in the city's own time, 0-23; null = all day (Phase 5 §9 "time-period")
+  startHour       Int?
+  endHour         Int?
   usageLimit      Int?
   usageCount      Int      @default(0)
   startsAt        DateTime @default(now())

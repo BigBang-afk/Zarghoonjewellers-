@@ -1,5 +1,5 @@
 import { api } from "./client"
-import type { AdminKpis, City, DriverAcquisitionCampaign, DriverFunnelStage } from "../types"
+import type { AdminKpis, City, DriverAcquisitionCampaign, DriverFunnelStage, Promotion, PromotionAnalytics } from "../types"
 
 export const adminApi = {
   kpis: (cityId?: string) => api.get<AdminKpis>("/admin/dashboard/kpis", cityId ? { cityId } : undefined),
@@ -62,4 +62,8 @@ export const adminApi = {
   driverFunnel: (cityId?: string) => api.get<{ stages: DriverFunnelStage[] }>("/admin/driver-acquisition/funnel", cityId ? { cityId } : undefined),
   campaignFunnel: (id: string) =>
     api.get<{ campaign: DriverAcquisitionCampaign; stages: DriverFunnelStage[] }>(`/admin/driver-acquisition/campaigns/${id}/funnel`),
+  promotions: () => api.get<{ promotions: Promotion[] }>("/admin/promotions"),
+  createPromotion: (data: Partial<Promotion>) => api.post<{ promotion: Promotion }>("/admin/promotions", data),
+  updatePromotion: (id: string, data: Partial<Promotion>) => api.put<{ promotion: Promotion }>(`/admin/promotions/${id}`, data),
+  promotionAnalytics: (id: string) => api.get<PromotionAnalytics>(`/admin/promotions/${id}/analytics`),
 }

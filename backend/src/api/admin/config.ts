@@ -278,7 +278,7 @@ adminConfigRouter.put(
 // city, new-users-only, usage limit, expiration.
 // ---------------------------------------------------------------------
 
-const promotionSchema = z.object({
+const promotionBaseSchema = z.object({
   code: z.string().trim().min(3).max(20).transform((s) => s.toUpperCase()),
   description: z.string().trim().max(200).optional(),
   campaignType: z
@@ -300,10 +300,37 @@ const promotionSchema = z.object({
   cityId: z.string().uuid().optional(),
   vehicleTypeId: z.string().uuid().optional(),
   newUsersOnly: z.boolean().default(false),
+  existingUsersOnly: z.boolean().default(false),
+  minCompletedRides: z.number().int().nonnegative().optional(),
+  maxCompletedRides: z.number().int().nonnegative().optional(),
+  requiredAcquisitionSource: z.enum(["organic", "referral", "social", "campaign", "partner", "other"]).optional(),
+  /** Weekdays 0 (Sun) - 6 (Sat) this promo is valid on; omitted/empty/null = every day. */
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).nullable().optional(),
+  startHour: z.number().int().min(0).max(23).optional(),
+  endHour: z.number().int().min(0).max(23).optional(),
   usageLimit: z.number().int().positive().optional(),
   startsAt: z.coerce.date().optional(),
   expiresAt: z.coerce.date().optional(),
 })
+
+function validateRuleConsistency<T extends { newUsersOnly?: boolean; existingUsersOnly?: boolean; startHour?: number; endHour?: number }>(
+  schema: z.ZodType<T>,
+) {
+  return schema
+    .refine((v) => !(v.newUsersOnly && v.existingUsersOnly), { message: "A promotion can't require both new-users-only and existing-users-only." })
+    .refine((v) => (v.startHour == null) === (v.endHour == null), { message: "startHour and endHour must be set together." })
+}
+
+const promotionSchema = validateRuleConsistency(promotionBaseSchema)
+
+/** daysOfWeek travels as a number[] over the API but is stored as a JSON string column. */
+function serializePromoBody<T extends { daysOfWeek?: number[] | null }>(body: T) {
+  if (!("daysOfWeek" in body)) return body
+  return { ...body, daysOfWeek: body.daysOfWeek ? JSON.stringify(body.daysOfWeek) : null }
+}
+function deserializePromo<T extends { daysOfWeek: string | null }>(promo: T) {
+  return { ...promo, daysOfWeek: promo.daysOfWeek ? (JSON.parse(promo.daysOfWeek) as number[]) : null }
+}
 
 adminConfigRouter.get(
   "/promotions",
@@ -312,7 +339,7 @@ adminConfigRouter.get(
       include: { city: true, vehicleType: true },
       orderBy: { createdAt: "desc" },
     })
-    res.json({ promotions })
+    res.json({ promotions: promotions.map(deserializePromo) })
   }),
 )
 
@@ -323,22 +350,69 @@ adminConfigRouter.post(
   asyncHandler(async (req, res) => {
     const existing = await prisma.promotion.findUnique({ where: { code: req.body.code } })
     if (existing) throw ApiError.conflict("PROMO_CODE_EXISTS", "A promotion with this code already exists.")
-    const promotion = await prisma.promotion.create({ data: { ...req.body, createdById: req.auth!.userId } })
+    const promotion = await prisma.promotion.create({ data: { ...serializePromoBody(req.body), createdById: req.auth!.userId } })
     await writeAuditLog({ req, action: "promotion.create", targetTable: "promotions", targetId: promotion.id, after: req.body })
-    res.status(201).json({ promotion })
+    res.status(201).json({ promotion: deserializePromo(promotion) })
   }),
 )
 
 adminConfigRouter.put(
   "/promotions/:id",
   requireAdminRole("super_admin", "ops_manager", "finance"),
-  validateBody(promotionSchema.partial().extend({ isActive: z.boolean().optional() })),
+  validateBody(validateRuleConsistency(promotionBaseSchema.partial().extend({ isActive: z.boolean().optional() }))),
   asyncHandler(async (req, res) => {
     const before = await prisma.promotion.findUnique({ where: { id: req.params.id } })
     if (!before) throw ApiError.notFound("Promotion not found.")
-    const promotion = await prisma.promotion.update({ where: { id: req.params.id }, data: req.body })
+    const promotion = await prisma.promotion.update({ where: { id: req.params.id }, data: serializePromoBody(req.body) })
     await writeAuditLog({ req, action: "promotion.update", targetTable: "promotions", targetId: promotion.id, before, after: req.body })
-    res.json({ promotion })
+    res.json({ promotion: deserializePromo(promotion) })
+  }),
+)
+
+/**
+ * Campaign analytics (Phase 5 §9) — every figure here is a direct
+ * measurement (redemptions, discount cost, gross fare of promo-tagged
+ * rides, current repeat-ride rate of redeemers). There is deliberately
+ * no "incremental rides/revenue" figure: attributing a ride to a promo
+ * causally (vs. what the passenger would have booked anyway) needs a
+ * control group or holdout methodology this platform doesn't run yet —
+ * claiming a number there without one would be exactly the "labeled
+ * incremental without methodology" the spec warns against.
+ */
+adminConfigRouter.get(
+  "/promotions/:id/analytics",
+  asyncHandler(async (req, res) => {
+    const promotion = await prisma.promotion.findUnique({ where: { id: req.params.id } })
+    if (!promotion) throw ApiError.notFound("Promotion not found.")
+
+    const [redemptions, discountAgg, revenueAgg, redeemerIds] = await Promise.all([
+      prisma.promoRedemption.count({ where: { promotionId: promotion.id } }),
+      prisma.promoRedemption.aggregate({ where: { promotionId: promotion.id }, _sum: { discountAmount: true } }),
+      prisma.payment.aggregate({ where: { promotionId: promotion.id, status: "captured" }, _sum: { amount: true } }),
+      prisma.promoRedemption.findMany({ where: { promotionId: promotion.id }, select: { userId: true }, distinct: ["userId"] }),
+    ])
+
+    let repeatRatePct: number | null = null
+    if (redeemerIds.length > 0) {
+      const passengerProfiles = await prisma.passengerProfile.findMany({
+        where: { userId: { in: redeemerIds.map((r) => r.userId) } },
+        select: { completedRides: true },
+      })
+      const repeaters = passengerProfiles.filter((p) => p.completedRides > 1).length
+      repeatRatePct = passengerProfiles.length ? Math.round((repeaters / passengerProfiles.length) * 10000) / 100 : null
+    }
+
+    res.json({
+      promotionId: promotion.id,
+      code: promotion.code,
+      redemptions,
+      redeemersCount: redeemerIds.length,
+      totalDiscountRs: { value: discountAgg._sum.discountAmount ?? 0, basis: "actual" },
+      totalRevenueRs: { value: revenueAgg._sum.amount ?? 0, basis: "actual", note: "Gross fare of rides that used this code — not causally attributed to the promo." },
+      repeatRatePct: { value: repeatRatePct, basis: "actual", note: "Share of redeemers who currently have 2+ completed rides — a snapshot, not a before/after comparison." },
+      usageLimit: promotion.usageLimit,
+      usageCount: promotion.usageCount,
+    })
   }),
 )
 

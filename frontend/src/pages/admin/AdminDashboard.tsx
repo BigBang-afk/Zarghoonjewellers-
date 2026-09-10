@@ -42,6 +42,7 @@ import type { AdminKpis, City } from "../../types"
 import { DriverVerificationPanel } from "./DriverVerificationPanel"
 import { DirectoryPanel } from "./DirectoryPanel"
 import { DriverAcquisitionPanel } from "./DriverAcquisitionPanel"
+import { PromotionsPanel } from "./PromotionsPanel"
 
 const nav = [
   {
@@ -103,7 +104,7 @@ const nav = [
   },
 ]
 
-const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Passengers", "Drivers", "Ride Requests"])
+const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Passengers", "Drivers", "Ride Requests"])
 
 export function AdminDashboard() {
   const { user } = useAuth()
@@ -198,6 +199,8 @@ export function AdminDashboard() {
             <DriverVerificationPanel />
           ) : active === "Driver Acquisition" ? (
             <DriverAcquisitionPanel />
+          ) : active === "Promotions" ? (
+            <PromotionsPanel />
           ) : active === "Passengers" ? (
             <DirectoryPanel kind="passengers" />
           ) : active === "Drivers" ? (

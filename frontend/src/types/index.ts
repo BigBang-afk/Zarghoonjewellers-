@@ -250,6 +250,46 @@ export interface ReferralSummary {
   totalRewardedRs: number
 }
 
+export interface Promotion {
+  id: string
+  code: string
+  description: string | null
+  campaignType: string | null
+  discountType: "percentage" | "flat"
+  discountValue: number
+  maxDiscount: number | null
+  minFare: number | null
+  cityId: string | null
+  vehicleTypeId: string | null
+  newUsersOnly: boolean
+  existingUsersOnly: boolean
+  minCompletedRides: number | null
+  maxCompletedRides: number | null
+  requiredAcquisitionSource: string | null
+  daysOfWeek: number[] | null
+  startHour: number | null
+  endHour: number | null
+  usageLimit: number | null
+  usageCount: number
+  startsAt: string
+  expiresAt: string | null
+  isActive: boolean
+  city?: { name: string } | null
+  vehicleType?: { name: string } | null
+}
+
+export interface PromotionAnalytics {
+  promotionId: string
+  code: string
+  redemptions: number
+  redeemersCount: number
+  totalDiscountRs: { value: number; basis: string }
+  totalRevenueRs: { value: number; basis: string; note: string }
+  repeatRatePct: { value: number | null; basis: string; note: string }
+  usageLimit: number | null
+  usageCount: number
+}
+
 export type DocType = "national_id" | "driving_license" | "vehicle_registration" | "insurance" | "route_permit" | "profile_photo"
 
 export interface DriverDocument {
