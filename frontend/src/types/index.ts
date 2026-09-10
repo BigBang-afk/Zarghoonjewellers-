@@ -219,3 +219,24 @@ export interface AdminKpis {
   repeatPassengerRatePct: number
   pendingDriverVerifications: number
 }
+
+export interface DriverAcquisitionCampaign {
+  id: string
+  name: string
+  code: string
+  description: string | null
+  cityId: string | null
+  vehicleTypeId: string | null
+  targetDriverCount: number
+  incentiveAmount: number | null
+  startDate: string
+  endDate: string
+  status: "draft" | "active" | "paused" | "completed"
+  city?: { name: string; currencyCode: string } | null
+  vehicleType?: { name: string } | null
+}
+
+export interface DriverFunnelStage {
+  stage: "applications" | "verification_pending" | "approved" | "online" | "first_ride" | "active"
+  count: number
+}

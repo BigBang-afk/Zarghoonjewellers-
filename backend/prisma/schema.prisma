@@ -87,6 +87,7 @@ model City {
   scheduledRides  ScheduledRide[]
   businessAccounts BusinessAccount[]
   contentItems    ContentItem[]
+  driverAcquisitionCampaigns DriverAcquisitionCampaign[]
 
   @@unique([countryId, name])
   @@index([status])
@@ -132,6 +133,7 @@ model VehicleType {
   incentiveCampaigns IncentiveCampaign[]
   promotions      Promotion[]
   scheduledRides  ScheduledRide[]
+  driverAcquisitionCampaigns DriverAcquisitionCampaign[]
 
   @@map("vehicle_types")
 }
@@ -283,6 +285,7 @@ model DriverProfile {
   incentiveRewards    IncentiveReward[]
   favoritedBy         FavoriteDriver[]
   payoutRequests      PayoutRequest[]
+  acquisitionRewards  DriverAcquisitionReward[]
 
   @@index([cityId, availabilityStatus])
   @@index([verificationStatus])
@@ -719,7 +722,8 @@ model Wallet {
 }
 
 /// type: ride_charge | ride_payout | commission | wallet_topup | withdrawal |
-///       promo_credit | adjustment | refund | incentive_bonus | referral_reward
+///       promo_credit | adjustment | refund | incentive_bonus | referral_reward |
+///       acquisition_bonus
 model Transaction {
   id              String   @id @default(uuid())
   walletId        String
@@ -1118,6 +1122,58 @@ model IncentiveReward {
 
   @@index([driverId])
   @@map("incentive_rewards")
+}
+
+// ---------------------------------------------------------------------
+// Driver acquisition (Phase 5 §4) — distinct from IncentiveCampaign
+// above: that rewards *existing* drivers for ride volume, this targets
+// new driver signups. Attribution runs through the same acquisitionCampaign
+// free-text field already captured at registration (Phase 4 §22) — a
+// campaign's `code` is what a registration link is expected to pass as
+// acquisitionCampaign, so funnel counts are a live query against
+// User/DriverProfile, never a separately-maintained counter that can drift.
+// ---------------------------------------------------------------------
+
+/// status: draft | active | paused | completed
+model DriverAcquisitionCampaign {
+  id                String   @id @default(uuid())
+  name              String
+  code              String   @unique
+  description       String?
+  cityId            String?
+  vehicleTypeId     String?
+  targetDriverCount Int
+  /// One-time signup bonus paid once an attributed driver is approved; null = no monetary incentive, tracking only.
+  incentiveAmount   Float?
+  startDate         DateTime
+  endDate           DateTime
+  status            String   @default("draft")
+  createdById       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  city              City?        @relation(fields: [cityId], references: [id])
+  vehicleType       VehicleType? @relation(fields: [vehicleTypeId], references: [id])
+  rewards           DriverAcquisitionReward[]
+
+  @@index([status, startDate, endDate])
+  @@map("driver_acquisition_campaigns")
+}
+
+model DriverAcquisitionReward {
+  id            String   @id @default(uuid())
+  driverId      String
+  campaignId    String
+  amount        Float
+  currencyCode  String
+  transactionId String?
+  awardedAt     DateTime @default(now())
+
+  driver        DriverProfile             @relation(fields: [driverId], references: [id])
+  campaign      DriverAcquisitionCampaign @relation(fields: [campaignId], references: [id])
+
+  @@unique([driverId, campaignId])
+  @@map("driver_acquisition_rewards")
 }
 
 // ---------------------------------------------------------------------

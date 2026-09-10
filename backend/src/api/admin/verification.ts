@@ -8,6 +8,7 @@ import { ApiError } from "../../utils/apiError.js"
 import { writeAuditLog } from "../../shared/audit.js"
 import { notify } from "../../services/notifications/NotificationService.js"
 import { getSetting } from "../../config/settings.js"
+import { awardAcquisitionBonusIfEligible } from "../../services/driverAcquisitionService.js"
 
 export const adminVerificationRouter = Router()
 
@@ -36,6 +37,7 @@ adminVerificationRouter.post(
 
     if (req.body.decision === "approve") {
       await prisma.vehicle.updateMany({ where: { driverId: driver.id, status: "pending" }, data: { status: "active" } })
+      await awardAcquisitionBonusIfEligible(driver.id)
     }
 
     await writeAuditLog({

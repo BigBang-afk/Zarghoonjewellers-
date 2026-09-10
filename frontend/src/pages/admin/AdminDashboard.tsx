@@ -26,6 +26,7 @@ import {
   UserCog,
   BarChart3,
   FileBarChart,
+  TrendingUp,
 } from "lucide-react"
 import { Logo } from "../../components/Logo"
 import { Card } from "../../components/ui/Card"
@@ -40,6 +41,7 @@ import { useLocale } from "../../i18n"
 import type { AdminKpis, City } from "../../types"
 import { DriverVerificationPanel } from "./DriverVerificationPanel"
 import { DirectoryPanel } from "./DirectoryPanel"
+import { DriverAcquisitionPanel } from "./DriverAcquisitionPanel"
 
 const nav = [
   {
@@ -55,6 +57,7 @@ const nav = [
       { label: "Passengers", icon: Users },
       { label: "Drivers", icon: Car },
       { label: "Driver Verification", icon: ShieldAlert },
+      { label: "Driver Acquisition", icon: TrendingUp },
       { label: "Vehicles", icon: Car },
       { label: "Ride Requests", icon: ClipboardList },
       { label: "Active Rides", icon: Route },
@@ -100,7 +103,7 @@ const nav = [
   },
 ]
 
-const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Passengers", "Drivers", "Ride Requests"])
+const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Passengers", "Drivers", "Ride Requests"])
 
 export function AdminDashboard() {
   const { user } = useAuth()
@@ -193,6 +196,8 @@ export function AdminDashboard() {
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           {active === "Driver Verification" ? (
             <DriverVerificationPanel />
+          ) : active === "Driver Acquisition" ? (
+            <DriverAcquisitionPanel />
           ) : active === "Passengers" ? (
             <DirectoryPanel kind="passengers" />
           ) : active === "Drivers" ? (

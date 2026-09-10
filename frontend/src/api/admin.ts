@@ -1,5 +1,5 @@
 import { api } from "./client"
-import type { AdminKpis, City } from "../types"
+import type { AdminKpis, City, DriverAcquisitionCampaign, DriverFunnelStage } from "../types"
 
 export const adminApi = {
   kpis: (cityId?: string) => api.get<AdminKpis>("/admin/dashboard/kpis", cityId ? { cityId } : undefined),
@@ -41,4 +41,23 @@ export const adminApi = {
       openRequestsCount: number
       alerts: string[]
     }>("/admin/supply/dashboard", cityId ? { cityId } : undefined),
+  driverAcquisitionCampaigns: (query?: { status?: string; cityId?: string }) =>
+    api.get<{ campaigns: DriverAcquisitionCampaign[] }>("/admin/driver-acquisition/campaigns", query),
+  createDriverAcquisitionCampaign: (data: {
+    name: string
+    code: string
+    description?: string
+    cityId?: string
+    vehicleTypeId?: string
+    targetDriverCount: number
+    incentiveAmount?: number
+    startDate: string
+    endDate: string
+    status?: string
+  }) => api.post<{ campaign: DriverAcquisitionCampaign }>("/admin/driver-acquisition/campaigns", data),
+  updateDriverAcquisitionCampaign: (id: string, data: Partial<{ status: string; targetDriverCount: number; incentiveAmount: number; startDate: string; endDate: string; description: string }>) =>
+    api.patch<{ campaign: DriverAcquisitionCampaign }>(`/admin/driver-acquisition/campaigns/${id}`, data),
+  driverFunnel: (cityId?: string) => api.get<{ stages: DriverFunnelStage[] }>("/admin/driver-acquisition/funnel", cityId ? { cityId } : undefined),
+  campaignFunnel: (id: string) =>
+    api.get<{ campaign: DriverAcquisitionCampaign; stages: DriverFunnelStage[] }>(`/admin/driver-acquisition/campaigns/${id}/funnel`),
 }

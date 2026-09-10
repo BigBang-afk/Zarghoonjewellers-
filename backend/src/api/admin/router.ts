@@ -14,6 +14,7 @@ import { adminNotificationTemplateRouter } from "./notificationTemplates.js"
 import { adminMarketingRouter } from "./marketing.js"
 import { adminPrivacyRouter } from "./privacy.js"
 import { adminPilotModeRouter } from "./pilotMode.js"
+import { adminDriverAcquisitionRouter } from "./driverAcquisition.js"
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireRole("admin"))
@@ -32,3 +33,4 @@ adminRouter.use(adminNotificationTemplateRouter)
 adminRouter.use(adminMarketingRouter)
 adminRouter.use(adminPrivacyRouter)
 adminRouter.use(adminPilotModeRouter)
+adminRouter.use(adminDriverAcquisitionRouter)
