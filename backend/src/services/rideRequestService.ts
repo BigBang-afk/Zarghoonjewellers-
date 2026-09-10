@@ -3,7 +3,7 @@ import { ApiError } from "../utils/apiError.js"
 import { getSetting } from "../config/settings.js"
 import { mapProvider } from "./maps/HaversineMapProvider.js"
 import { computeFare, assertFareWithinGuardrails } from "./fareEngine.js"
-import { findEligibleDrivers } from "./matchingEngine.js"
+import { findEligibleDrivers, type NoMatchReason } from "./matchingEngine.js"
 import { validatePromoCode, recordPromoRedemption } from "./promoService.js"
 import { getMutuallyBlockedUserIds } from "./safetyService.js"
 import { enforceBusinessRidePolicy } from "./businessService.js"
@@ -127,6 +127,9 @@ async function alreadyContactedDriverIds(rideRequestId: string): Promise<string[
   return offers.map((o) => o.driverId)
 }
 
+/** Phase 5 §13 — reasons a request can end without a match, beyond what matchingEngine's search itself can report. */
+type DispatchNoMatchReason = NoMatchReason | "dispatch_hop_cap_reached" | "request_expired_no_response"
+
 /**
  * Quick Match dispatch (docs/01 §2 Mode 1): sequential single-driver
  * offers to the best-scored candidate. On decline/expiry the caller
@@ -148,7 +151,11 @@ export async function dispatchQuickMatchNext(rideRequestId: string) {
   const maxHops = await getSetting("matching.maxDispatchHops")
   if (exclude.length >= maxHops) {
     recordFailure("matching_failures", { rideRequestId, reason: "hop_cap_reached" })
-    await expireRequest(rideRequestId, "We tried several nearby drivers but couldn't find a match right now. Please try again shortly.")
+    await expireRequest(
+      rideRequestId,
+      "We tried several nearby drivers but couldn't find a match right now. Please try again shortly.",
+      "dispatch_hop_cap_reached",
+    )
     return { status: "no_drivers" as const }
   }
 
@@ -156,7 +163,7 @@ export async function dispatchQuickMatchNext(rideRequestId: string) {
   const passengerForBlocks = await prisma.passengerProfile.findUniqueOrThrow({ where: { id: request.passengerId } })
   const excludeUserIds = await getMutuallyBlockedUserIds(passengerForBlocks.userId)
 
-  const { candidates, staleExcludedCount } = await findEligibleDrivers({
+  const { candidates, staleExcludedCount, stage, noMatchReason } = await findEligibleDrivers({
     cityId: request.cityId,
     vehicleTypeId: request.vehicleTypeId,
     pickup: { lat: pickup.lat, lng: pickup.lng },
@@ -165,6 +172,7 @@ export async function dispatchQuickMatchNext(rideRequestId: string) {
     favoriteDriverIds,
     limit: 1,
   })
+  await prisma.rideRequest.update({ where: { id: rideRequestId }, data: { dispatchStage: stage } })
 
   if (candidates.length === 0) {
     recordFailure("matching_failures", { rideRequestId, reason: "no_eligible_drivers", staleExcludedCount })
@@ -173,6 +181,7 @@ export async function dispatchQuickMatchNext(rideRequestId: string) {
       staleExcludedCount > 0
         ? "No drivers were available near your pickup (some nearby drivers had stale location data)."
         : "No drivers were available near your pickup.",
+      noMatchReason ?? "no_drivers_within_max_radius",
     )
     return { status: "no_drivers" as const }
   }
@@ -223,7 +232,7 @@ export async function dispatchCompetitiveBroadcast(rideRequestId: string) {
   const passengerForBlocks = await prisma.passengerProfile.findUniqueOrThrow({ where: { id: request.passengerId } })
   const excludeUserIds = await getMutuallyBlockedUserIds(passengerForBlocks.userId)
 
-  const { candidates } = await findEligibleDrivers({
+  const { candidates, stage, noMatchReason } = await findEligibleDrivers({
     cityId: request.cityId,
     vehicleTypeId: request.vehicleTypeId,
     pickup: { lat: pickup.lat, lng: pickup.lng },
@@ -231,10 +240,11 @@ export async function dispatchCompetitiveBroadcast(rideRequestId: string) {
     favoriteDriverIds,
     limit: maxDrivers,
   })
+  await prisma.rideRequest.update({ where: { id: rideRequestId }, data: { dispatchStage: stage } })
 
   if (candidates.length === 0) {
     recordFailure("matching_failures", { rideRequestId, reason: "no_eligible_drivers_broadcast" })
-    await expireRequest(rideRequestId, "No drivers were available near your pickup.")
+    await expireRequest(rideRequestId, "No drivers were available near your pickup.", noMatchReason ?? "no_drivers_within_max_radius")
     return { status: "no_drivers" as const }
   }
 
@@ -282,12 +292,15 @@ export async function dispatchCompetitiveBroadcast(rideRequestId: string) {
   return { status: "dispatched" as const, driversNotified: candidates.length }
 }
 
-export async function expireRequest(rideRequestId: string, reason: string) {
+export async function expireRequest(rideRequestId: string, reason: string, noMatchReasonCode?: DispatchNoMatchReason) {
   const request = await prisma.rideRequest.findUnique({ where: { id: rideRequestId } })
   if (!request || !["searching", "offers_open"].includes(request.status)) return
 
   await prisma.$transaction([
-    prisma.rideRequest.update({ where: { id: rideRequestId }, data: { status: "expired" } }),
+    prisma.rideRequest.update({
+      where: { id: rideRequestId },
+      data: { status: "expired", noMatchReason: noMatchReasonCode ?? "request_expired_no_response" },
+    }),
     prisma.rideOffer.updateMany({ where: { rideRequestId, status: "pending" }, data: { status: "expired" } }),
   ])
 

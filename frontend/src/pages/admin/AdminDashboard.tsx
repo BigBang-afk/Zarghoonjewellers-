@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   Sliders,
   Tag,
+  Target,
   Users,
   Wallet,
   Building2,
@@ -45,6 +46,7 @@ import { DirectoryPanel } from "./DirectoryPanel"
 import { DriverAcquisitionPanel } from "./DriverAcquisitionPanel"
 import { PromotionsPanel } from "./PromotionsPanel"
 import { HeatMapPanel } from "./HeatMapPanel"
+import { DispatchAnalyticsPanel } from "./DispatchAnalyticsPanel"
 
 const nav = [
   {
@@ -64,6 +66,7 @@ const nav = [
       { label: "Driver Acquisition", icon: TrendingUp },
       { label: "Vehicles", icon: Car },
       { label: "Ride Requests", icon: ClipboardList },
+      { label: "Dispatch Performance", icon: Target },
       { label: "Active Rides", icon: Route },
       { label: "Completed Rides", icon: CheckCircle2 },
       { label: "Cancelled Rides", icon: FileClock },
@@ -107,7 +110,7 @@ const nav = [
   },
 ]
 
-const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Demand Heat Map", "Passengers", "Drivers", "Ride Requests"])
+const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Demand Heat Map", "Dispatch Performance", "Passengers", "Drivers", "Ride Requests"])
 
 export function AdminDashboard() {
   const { user } = useAuth()
@@ -206,6 +209,8 @@ export function AdminDashboard() {
             <PromotionsPanel />
           ) : active === "Demand Heat Map" ? (
             <HeatMapPanel />
+          ) : active === "Dispatch Performance" ? (
+            <DispatchAnalyticsPanel />
           ) : active === "Passengers" ? (
             <DirectoryPanel kind="passengers" />
           ) : active === "Drivers" ? (

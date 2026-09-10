@@ -468,6 +468,15 @@ model RideRequest {
   createdAt                     DateTime @default(now())
   updatedAt                     DateTime @updatedAt
 
+  /// Phase 5 §13 — advanced dispatch tracking. dispatchStage is the stage
+  /// (closest_eligible | expand_radius | expand_pool | none_available)
+  /// that most recently produced (or failed to produce) candidates for
+  /// this request; noMatchReason is set only when the request ends
+  /// without a match, with a stable machine-readable code so admin
+  /// dashboards can query/aggregate it instead of parsing log lines.
+  dispatchStage                 String?
+  noMatchReason                 String?
+
   passenger    PassengerProfile @relation(fields: [passengerId], references: [id])
   city         City             @relation(fields: [cityId], references: [id])
   zone         ServiceZone?     @relation(fields: [zoneId], references: [id])

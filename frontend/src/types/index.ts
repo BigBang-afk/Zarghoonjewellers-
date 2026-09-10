@@ -319,6 +319,19 @@ export interface DemandMap {
   bounds?: { minLat: number; maxLat: number; minLng: number; maxLng: number }
 }
 
+export interface DispatchAnalytics {
+  range: { from: string; to: string }
+  cityId: string | null
+  totalRequests: number
+  matchedCount: number
+  matchRatePct: number
+  avgTimeToMatchSec: number | null
+  avgDriversContactedPerRequest: number
+  avgOffersReceivedPerRequest: number
+  stageBreakdown: { stage: string; count: number }[]
+  noMatchReasonBreakdown: { reason: string; count: number }[]
+}
+
 export type DocType = "national_id" | "driving_license" | "vehicle_registration" | "insurance" | "route_permit" | "profile_photo"
 
 export interface DriverDocument {

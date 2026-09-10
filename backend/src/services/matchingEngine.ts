@@ -54,6 +54,20 @@ export interface MatchCandidate {
  * not hard-coded, and the full per-factor breakdown is returned so the
  * score is auditable rather than a black box.
  */
+/**
+ * Phase 5 §13 — advanced dispatch stages. "closest_eligible" and
+ * "expand_radius" are both served by the existing radius-expansion loop
+ * (radii[0] is closest-eligible, any later step is expand-radius);
+ * "expand_pool" is a distinct last tier that widens the *pool* itself
+ * (tolerating staler driver locations) rather than searching further out
+ * — for the case where nearby drivers exist but haven't pinged their
+ * location recently enough to count as "fresh". "none_available" means
+ * every tier was tried and nothing qualified.
+ */
+export type DispatchStage = "closest_eligible" | "expand_radius" | "expand_pool" | "none_available"
+
+export type NoMatchReason = "no_online_drivers_for_vehicle_type" | "all_nearby_drivers_stale" | "no_drivers_within_max_radius"
+
 export async function findEligibleDrivers(params: {
   cityId: string
   vehicleTypeId: string
@@ -62,13 +76,20 @@ export async function findEligibleDrivers(params: {
   excludeUserIds?: string[]
   favoriteDriverIds?: string[]
   limit?: number
-}): Promise<{ candidates: MatchCandidate[]; radiusUsedKm: number; staleExcludedCount: number }> {
-  const [platformInitialRadius, steps, maxRadius, stalenessMinutes, wEta, wAcceptance, wRating, wFairness, favoriteBoost, city] =
+}): Promise<{
+  candidates: MatchCandidate[]
+  radiusUsedKm: number
+  staleExcludedCount: number
+  stage: DispatchStage
+  noMatchReason: NoMatchReason | null
+}> {
+  const [platformInitialRadius, steps, maxRadius, stalenessMinutes, expandPoolStalenessMinutes, wEta, wAcceptance, wRating, wFairness, favoriteBoost, city] =
     await Promise.all([
       getSetting("matching.initialRadiusKm"),
       getSetting("matching.radiusExpansionStepsKm"),
       getSetting("matching.maxRadiusKm"),
       getSetting("matching.locationStalenessMinutes"),
+      getSetting("matching.expandPoolStalenessMinutes"),
       getSetting("matching.weightEta"),
       getSetting("matching.weightAcceptance"),
       getSetting("matching.weightRating"),
@@ -85,37 +106,24 @@ export async function findEligibleDrivers(params: {
   const radii = [initialRadius, ...steps].filter((r) => r <= maxRadius)
   if (radii[radii.length - 1] !== maxRadius) radii.push(maxRadius)
 
+  const basePoolWhere = {
+    cityId: params.cityId,
+    availabilityStatus: "online" as const,
+    verificationStatus: "approved" as const,
+    deletedAt: null,
+    id: { notIn: params.excludeDriverIds ?? [] },
+    userId: { notIn: params.excludeUserIds ?? [] },
+    vehicles: { some: { vehicleTypeId: params.vehicleTypeId, status: "active" as const } },
+  }
+  const poolInclude = { user: true, vehicles: { where: { vehicleTypeId: params.vehicleTypeId, status: "active" as const }, take: 1 } }
+
   const staleCutoff = new Date(Date.now() - stalenessMinutes * 60_000)
 
   const [allOnlinePool, freshPool] = await Promise.all([
-    prisma.driverProfile.count({
-      where: {
-        cityId: params.cityId,
-        availabilityStatus: "online",
-        verificationStatus: "approved",
-        deletedAt: null,
-        id: { notIn: params.excludeDriverIds ?? [] },
-        userId: { notIn: params.excludeUserIds ?? [] },
-        vehicles: { some: { vehicleTypeId: params.vehicleTypeId, status: "active" } },
-      },
-    }),
+    prisma.driverProfile.count({ where: basePoolWhere }),
     prisma.driverProfile.findMany({
-      where: {
-        cityId: params.cityId,
-        availabilityStatus: "online",
-        verificationStatus: "approved",
-        deletedAt: null,
-        id: { notIn: params.excludeDriverIds ?? [] },
-        userId: { notIn: params.excludeUserIds ?? [] },
-        lastLat: { not: null },
-        lastLng: { not: null },
-        lastLocationAt: { gte: staleCutoff },
-        vehicles: { some: { vehicleTypeId: params.vehicleTypeId, status: "active" } },
-      },
-      include: {
-        user: true,
-        vehicles: { where: { vehicleTypeId: params.vehicleTypeId, status: "active" }, take: 1 },
-      },
+      where: { ...basePoolWhere, lastLat: { not: null }, lastLng: { not: null }, lastLocationAt: { gte: staleCutoff } },
+      include: poolInclude,
       // Phase 4 §29 — bounds the worst case for a single very large city's
       // online-driver pool before the in-memory haversine filter below runs.
       // A real geospatial index (PostGIS/geohash) is the correct fix once a
@@ -128,11 +136,46 @@ export async function findEligibleDrivers(params: {
 
   let radiusUsedKm = radii[0]
   let withinRadius: typeof freshPool = []
+  let stage: DispatchStage = "closest_eligible"
 
-  for (const radius of radii) {
+  for (let i = 0; i < radii.length; i++) {
+    const radius = radii[i]
     withinRadius = freshPool.filter((d) => haversineKm(params.pickup, { lat: d.lastLat!, lng: d.lastLng! }) <= radius)
     radiusUsedKm = radius
-    if (withinRadius.length > 0) break
+    if (withinRadius.length > 0) {
+      stage = i === 0 ? "closest_eligible" : "expand_radius"
+      break
+    }
+  }
+
+  let noMatchReason: NoMatchReason | null = null
+  if (withinRadius.length === 0) {
+    if (allOnlinePool === 0) {
+      stage = "none_available"
+      noMatchReason = "no_online_drivers_for_vehicle_type"
+    } else if (staleExcludedCount > 0) {
+      // Expand-pool tier: nearby drivers exist but were excluded for
+      // stale location data — retry at max radius with a wider (but
+      // still bounded and configurable) staleness tolerance before
+      // giving up entirely.
+      const expandCutoff = new Date(Date.now() - Math.max(expandPoolStalenessMinutes, stalenessMinutes) * 60_000)
+      const widerPool = await prisma.driverProfile.findMany({
+        where: { ...basePoolWhere, lastLat: { not: null }, lastLng: { not: null }, lastLocationAt: { gte: expandCutoff } },
+        include: poolInclude,
+        take: 500,
+      })
+      withinRadius = widerPool.filter((d) => haversineKm(params.pickup, { lat: d.lastLat!, lng: d.lastLng! }) <= maxRadius)
+      radiusUsedKm = maxRadius
+      if (withinRadius.length > 0) {
+        stage = "expand_pool"
+      } else {
+        stage = "none_available"
+        noMatchReason = "all_nearby_drivers_stale"
+      }
+    } else {
+      stage = "none_available"
+      noMatchReason = "no_drivers_within_max_radius"
+    }
   }
 
   const vehicleTypeRow = await prisma.vehicleType.findUnique({ where: { id: params.vehicleTypeId } })
@@ -188,5 +231,5 @@ export async function findEligibleDrivers(params: {
   scored.sort((a, b) => b.score - a.score)
   const limited = params.limit ? scored.slice(0, params.limit) : scored
 
-  return { candidates: limited, radiusUsedKm, staleExcludedCount }
+  return { candidates: limited, radiusUsedKm, staleExcludedCount, stage, noMatchReason }
 }

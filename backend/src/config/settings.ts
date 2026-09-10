@@ -110,6 +110,15 @@ export interface PlatformSettingsShape {
   // caution; above yellowMaxRatio is red. Configurable, never hard-coded.
   "supplyDemand.greenMaxRatio": number
   "supplyDemand.yellowMaxRatio": number
+
+  // Phase 5 §13 — advanced dispatch staging. findEligibleDrivers() already
+  // walks matching.radiusExpansionStepsKm ("closest eligible" -> "expand
+  // radius"); once that's exhausted with zero candidates, "expand pool"
+  // is a last, explicitly-labeled tier that widens the candidate pool
+  // itself (allowing staler driver locations) instead of trying yet
+  // another radius. Must be >= matching.locationStalenessMinutes or it
+  // has no effect.
+  "matching.expandPoolStalenessMinutes": number
 }
 
 const DEFAULTS: PlatformSettingsShape = {
@@ -179,6 +188,8 @@ const DEFAULTS: PlatformSettingsShape = {
 
   "supplyDemand.greenMaxRatio": 0.8,
   "supplyDemand.yellowMaxRatio": 1.5,
+
+  "matching.expandPoolStalenessMinutes": 25,
 }
 
 const CACHE_TTL_MS = 5_000
