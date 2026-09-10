@@ -39,6 +39,43 @@ export function roundMoney(amount: number, currencyCode: string): number {
   return Math.round(amount * factor) / factor
 }
 
+/**
+ * Decimal-safe money arithmetic (Phase 5 §2). `roundMoney` alone still
+ * lets IEEE-754 drift creep in across a *chain* of operations (e.g.
+ * `a - b + c` computed in floating point, then rounded once at the end
+ * can already be off by a fraction of a minor unit before rounding ever
+ * sees it). These three helpers instead convert each operand to the
+ * currency's own integer minor-unit (cents, for a 2-decimal currency)
+ * before the arithmetic, so every intermediate value is an exact
+ * integer — no accumulated float error — and convert back once at the
+ * end. Money stays a plain `number` everywhere else in the codebase
+ * (this is not a full Decimal type), but every call site doing more
+ * than a single literal assignment should route through these instead
+ * of raw `+`/`-`/`*` on two money values.
+ */
+function toMinorUnits(amount: number, currencyCode: string): number {
+  const { decimals } = getCurrencyMeta(currencyCode)
+  return Math.round(amount * 10 ** decimals)
+}
+
+function fromMinorUnits(minor: number, currencyCode: string): number {
+  const { decimals } = getCurrencyMeta(currencyCode)
+  return minor / 10 ** decimals
+}
+
+export function addMoney(a: number, b: number, currencyCode: string): number {
+  return fromMinorUnits(toMinorUnits(a, currencyCode) + toMinorUnits(b, currencyCode), currencyCode)
+}
+
+export function subtractMoney(a: number, b: number, currencyCode: string): number {
+  return fromMinorUnits(toMinorUnits(a, currencyCode) - toMinorUnits(b, currencyCode), currencyCode)
+}
+
+/** `factor` is a plain multiplier (e.g. a commission rate like 0.15), not itself a money amount. */
+export function multiplyMoney(amount: number, factor: number, currencyCode: string): number {
+  return fromMinorUnits(Math.round(toMinorUnits(amount, currencyCode) * factor), currencyCode)
+}
+
 /** e.g. formatMoney(1234.5, "PKR") -> "Rs 1,234.50"; formatMoney(500, "JPY") -> "¥500" */
 export function formatMoney(amount: number, currencyCode: string): string {
   const meta = getCurrencyMeta(currencyCode)

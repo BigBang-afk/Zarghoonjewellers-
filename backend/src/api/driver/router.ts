@@ -15,6 +15,7 @@ import { DocType, PaymentMethod } from "../../types/enums.js"
 import { getSetting } from "../../config/settings.js"
 import { recordFailure } from "../../services/observability.js"
 import { paymentRateLimit } from "../../middleware/rateLimit.js"
+import { roundMoney } from "../../utils/money.js"
 
 export const driverRouter = Router()
 driverRouter.use(requireAuth, requireRole("driver"))
@@ -204,23 +205,28 @@ driverRouter.get(
   asyncHandler(async (req, res) => {
     const driver = await getDriverProfileOrThrow(req.auth!.userId)
     const wallet = await prisma.wallet.findUnique({ where: { userId: req.auth!.userId } })
+    const currencyCode = wallet?.currencyCode ?? "PKR"
 
     async function summarize(since: Date) {
       const transactions = await prisma.transaction.findMany({
         where: { walletId: wallet?.id ?? "__none__", type: "ride_payout", createdAt: { gte: since } },
       })
       const total = transactions.reduce((sum, t) => sum + t.amount, 0)
-      return { totalRs: round2(total), rides: transactions.length, averageFareRs: transactions.length ? round2(total / transactions.length) : 0 }
+      return {
+        totalRs: roundMoney(total, currencyCode),
+        rides: transactions.length,
+        averageFareRs: transactions.length ? roundMoney(total / transactions.length, currencyCode) : 0,
+      }
     }
 
     const [today, week, month, dailySeries, weeklySeries, monthlySeries, earningsPerHour] = await Promise.all([
       summarize(startOfToday()),
       summarize(startOfWeek()),
       summarize(startOfMonth()),
-      buildSeries(wallet?.id, "day", 14),
-      buildSeries(wallet?.id, "week", 8),
-      buildSeries(wallet?.id, "month", 6),
-      computeEarningsPerHour(driver.id, wallet?.id),
+      buildSeries(wallet?.id, currencyCode, "day", 14),
+      buildSeries(wallet?.id, currencyCode, "week", 8),
+      buildSeries(wallet?.id, currencyCode, "month", 6),
+      computeEarningsPerHour(driver.id, wallet?.id, currencyCode),
     ])
 
     const totalRides = driver.completedRides + driver.cancelledRides
@@ -237,14 +243,14 @@ driverRouter.get(
       completedRides: driver.completedRides,
       cancelledRides: driver.cancelledRides,
       acceptanceRate: driver.acceptanceRate,
-      cancellationRate: totalRides ? round2((driver.cancelledRides / totalRides) * 100) : 0,
+      cancellationRate: totalRides ? Math.round((driver.cancelledRides / totalRides) * 10000) / 100 : 0,
       rating: driver.ratingAvg,
     })
   }),
 )
 
 /** Buckets ride_payout transactions into `count` trailing periods for chart rendering. */
-async function buildSeries(walletId: string | undefined, unit: "day" | "week" | "month", count: number) {
+async function buildSeries(walletId: string | undefined, currencyCode: string, unit: "day" | "week" | "month", count: number) {
   if (!walletId) return []
   const stepMs = unit === "day" ? 86_400_000 : unit === "week" ? 7 * 86_400_000 : 30 * 86_400_000
   const since = new Date(Date.now() - count * stepMs)
@@ -260,7 +266,7 @@ async function buildSeries(walletId: string | undefined, unit: "day" | "week" | 
     const inBucket = transactions.filter((t) => t.createdAt >= bucketStart && t.createdAt < bucketEnd)
     buckets.push({
       label: bucketStart.toISOString().slice(0, 10),
-      totalRs: round2(inBucket.reduce((sum, t) => sum + t.amount, 0)),
+      totalRs: roundMoney(inBucket.reduce((sum, t) => sum + t.amount, 0), currencyCode),
       rides: inBucket.length,
     })
   }
@@ -268,7 +274,7 @@ async function buildSeries(walletId: string | undefined, unit: "day" | "week" | 
 }
 
 /** Real elapsed online time from DriverOnlineSession logs, not an approximation. */
-async function computeEarningsPerHour(driverId: string, walletId: string | undefined): Promise<number> {
+async function computeEarningsPerHour(driverId: string, walletId: string | undefined, currencyCode: string): Promise<number> {
   const since = new Date(Date.now() - 30 * 86_400_000)
   const [sessions, payoutAgg] = await Promise.all([
     prisma.driverOnlineSession.findMany({ where: { driverId, startedAt: { gte: since } } }),
@@ -278,7 +284,7 @@ async function computeEarningsPerHour(driverId: string, walletId: string | undef
   ])
   const totalHours = sessions.reduce((sum, s) => sum + ((s.endedAt ?? new Date()).getTime() - s.startedAt.getTime()) / 3_600_000, 0)
   if (totalHours < 0.1) return 0
-  return round2((payoutAgg._sum.amount ?? 0) / totalHours)
+  return roundMoney((payoutAgg._sum.amount ?? 0) / totalHours, currencyCode)
 }
 
 driverRouter.get(
@@ -374,7 +380,3 @@ driverRouter.get(
     res.json(summary)
   }),
 )
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
-}

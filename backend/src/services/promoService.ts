@@ -1,6 +1,7 @@
 import { prisma } from "../utils/prisma.js"
 import { ApiError } from "../utils/apiError.js"
 import { recordRiskEvent } from "./riskService.js"
+import { multiplyMoney, roundMoney } from "../utils/money.js"
 
 export interface PromoValidationResult {
   promotionId: string
@@ -52,11 +53,15 @@ export async function validatePromoCode(params: {
     throw ApiError.conflict("PROMO_ALREADY_USED", "You've already used this promo code.")
   }
 
+  const city = await prisma.city.findUniqueOrThrow({ where: { id: params.cityId }, select: { currencyCode: true } })
+
   let discountAmount =
-    promo.discountType === "percentage" ? params.fareAmount * (promo.discountValue / 100) : promo.discountValue
+    promo.discountType === "percentage"
+      ? multiplyMoney(params.fareAmount, promo.discountValue / 100, city.currencyCode)
+      : promo.discountValue
   if (promo.maxDiscount != null) discountAmount = Math.min(discountAmount, promo.maxDiscount)
   discountAmount = Math.min(discountAmount, params.fareAmount) // never discount below zero
-  discountAmount = Math.round(discountAmount * 100) / 100
+  discountAmount = roundMoney(discountAmount, city.currencyCode)
 
   return { promotionId: promo.id, discountAmount }
 }

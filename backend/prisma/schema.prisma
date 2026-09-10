@@ -687,6 +687,10 @@ model Commission {
   paymentId   String   @unique
   rate        Float
   amount      Float
+  /// Denormalized from payment.currencyCode so this financial record is
+  /// self-describing without a join (Phase 5 §2: "every financial record
+  /// must contain currency").
+  currencyCode String
   createdAt   DateTime @default(now())
 
   payment     Payment  @relation(fields: [paymentId], references: [id])
@@ -723,6 +727,10 @@ model Transaction {
   type            String
   amount          Float    // signed: positive credit, negative debit
   balanceAfter    Float
+  /// Denormalized from wallet.currencyCode so this financial record is
+  /// self-describing without a join (Phase 5 §2: "every financial record
+  /// must contain currency").
+  currencyCode    String
   description     String?
   createdAt       DateTime @default(now())
 
@@ -743,6 +751,9 @@ model PayoutRequest {
   id              String   @id @default(uuid())
   driverId        String
   amount          Float
+  /// Denormalized from the driver's wallet.currencyCode at request time
+  /// (Phase 5 §2: "every financial record must contain currency").
+  currencyCode    String
   method          String   // matches PaymentMethod
   status          String   @default("requested")
   reference       String?  // provider payout/transfer reference, set once processing/completed

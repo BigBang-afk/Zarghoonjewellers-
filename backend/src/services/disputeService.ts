@@ -3,10 +3,7 @@ import { ApiError } from "../utils/apiError.js"
 import { getPaymentProvider } from "./payments/index.js"
 import { notify } from "./notifications/NotificationService.js"
 import { resolveUserCurrency } from "../shared/currency.js"
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
-}
+import { addMoney, roundMoney } from "../utils/money.js"
 
 /**
  * Dispute resolution actions (Phase 3 §19) — every decision is
@@ -35,7 +32,7 @@ export async function refundDispute(disputeId: string, adminUserId: string, amou
   const payment = dispute.ride.payment
   if (!payment) throw ApiError.badRequest("NO_PAYMENT", "This ride has no payment to refund.")
 
-  const refundAmount = round2(Math.min(amountRs ?? payment.amount, payment.amount));
+  const refundAmount = roundMoney(Math.min(amountRs ?? payment.amount, payment.amount), payment.currencyCode)
   const provider = getPaymentProvider(payment.method as "cash" | "card" | "wallet" | "local_provider")
   if (payment.providerReference) {
     await provider.refund(payment.providerReference, refundAmount)
@@ -46,7 +43,7 @@ export async function refundDispute(disputeId: string, adminUserId: string, amou
     create: { userId: dispute.ride.passenger.userId, balance: 0, currencyCode: payment.currencyCode },
     update: {},
   })
-  const newBalance = round2(wallet.balance + refundAmount)
+  const newBalance = addMoney(wallet.balance, refundAmount, payment.currencyCode)
 
   const [, , updated] = await prisma.$transaction([
     prisma.payment.update({ where: { id: payment.id }, data: { refundedAt: new Date(), status: "refunded" } }),
@@ -57,7 +54,7 @@ export async function refundDispute(disputeId: string, adminUserId: string, amou
     }),
   ])
   await prisma.transaction.create({
-    data: { walletId: wallet.id, paymentId: payment.id, type: "refund", amount: refundAmount, balanceAfter: newBalance, description: `Dispute refund: ${resolution}` },
+    data: { walletId: wallet.id, paymentId: payment.id, type: "refund", amount: refundAmount, balanceAfter: newBalance, currencyCode: payment.currencyCode, description: `Dispute refund: ${resolution}` },
   })
 
   await notify({ userId: dispute.ride.passenger.userId, type: "payment", title: "You've been refunded", body: `Rs ${refundAmount} was refunded to your wallet. ${resolution}`, data: { disputeId, refundAmount } })
@@ -71,12 +68,13 @@ export async function adjustDriverPayout(disputeId: string, adminUserId: string,
     throw ApiError.conflict("DISPUTE_CLOSED", "This dispute is already closed.")
   }
 
+  const driverCurrency = await resolveUserCurrency(dispute.ride.driver.userId)
   const wallet = await prisma.wallet.upsert({
     where: { userId: dispute.ride.driver.userId },
-    create: { userId: dispute.ride.driver.userId, balance: 0, currencyCode: await resolveUserCurrency(dispute.ride.driver.userId) },
+    create: { userId: dispute.ride.driver.userId, balance: 0, currencyCode: driverCurrency },
     update: {},
   })
-  const newBalance = round2(wallet.balance + amountRs)
+  const newBalance = addMoney(wallet.balance, amountRs, wallet.currencyCode)
 
   const [, updated] = await prisma.$transaction([
     prisma.wallet.update({ where: { id: wallet.id }, data: { balance: newBalance } }),
@@ -86,7 +84,7 @@ export async function adjustDriverPayout(disputeId: string, adminUserId: string,
     }),
   ])
   await prisma.transaction.create({
-    data: { walletId: wallet.id, type: "adjustment", amount: amountRs, balanceAfter: newBalance, description: `Dispute adjustment: ${resolution}` },
+    data: { walletId: wallet.id, type: "adjustment", amount: amountRs, balanceAfter: newBalance, currencyCode: wallet.currencyCode, description: `Dispute adjustment: ${resolution}` },
   })
 
   await notify({ userId: dispute.ride.driver.userId, type: "payment", title: "Payout adjustment", body: `Rs ${amountRs} was adjusted to your wallet. ${resolution}`, data: { disputeId, amountRs } })

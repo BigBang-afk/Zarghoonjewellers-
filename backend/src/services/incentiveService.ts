@@ -1,9 +1,6 @@
 import { prisma } from "../utils/prisma.js"
 import { notify } from "./notifications/NotificationService.js"
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
-}
+import { addMoney } from "../utils/money.js"
 
 /**
  * Driver incentives (Phase 2 §8) — campaigns, targets, and reward amounts
@@ -52,7 +49,7 @@ async function awardIncentive(driverId: string, campaignId: string, amount: numb
       create: { userId: driver.userId, balance: 0, currencyCode: driver.city.currencyCode },
       update: {},
     })
-    const newBalance = round2(wallet.balance + amount)
+    const newBalance = addMoney(wallet.balance, amount, wallet.currencyCode)
     await tx.wallet.update({ where: { id: wallet.id }, data: { balance: newBalance } })
     const transaction = await tx.transaction.create({
       data: {
@@ -60,6 +57,7 @@ async function awardIncentive(driverId: string, campaignId: string, amount: numb
         type: "incentive_bonus",
         amount,
         balanceAfter: newBalance,
+        currencyCode: wallet.currencyCode,
         description: `Incentive campaign reward`,
       },
     })

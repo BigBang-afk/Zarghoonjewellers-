@@ -1,6 +1,7 @@
 import { prisma } from "../utils/prisma.js"
 import { getSetting } from "../config/settings.js"
 import { ApiError } from "../utils/apiError.js"
+import { roundMoney, addMoney, multiplyMoney } from "../utils/money.js"
 
 export interface FareBreakdown {
   baseFare: number
@@ -70,16 +71,20 @@ export async function computeFare(input: {
   distanceKm: number
   durationMin: number
 }): Promise<FareBreakdown> {
-  const rule = await resolveFareRule(input.cityId, input.vehicleTypeId, input.zoneId)
-  const demandMultiplier = await getDemandMultiplier(input.cityId)
+  const [rule, demandMultiplier, city] = await Promise.all([
+    resolveFareRule(input.cityId, input.vehicleTypeId, input.zoneId),
+    getDemandMultiplier(input.cityId),
+    prisma.city.findUniqueOrThrow({ where: { id: input.cityId }, select: { currencyCode: true } }),
+  ])
+  const currencyCode = city.currencyCode
 
   const baseFare = rule.baseFare
-  const distanceCharge = round2(input.distanceKm * rule.perKmRate)
-  const durationCharge = round2(input.durationMin * rule.perMinRate)
-  const subtotal = round2(baseFare + distanceCharge + durationCharge)
+  const distanceCharge = multiplyMoney(input.distanceKm, rule.perKmRate, currencyCode)
+  const durationCharge = multiplyMoney(input.durationMin, rule.perMinRate, currencyCode)
+  const subtotal = addMoney(addMoney(baseFare, distanceCharge, currencyCode), durationCharge, currencyCode)
 
   const clampedMultiplier = Math.min(rule.surgeMaxMultiplier, Math.max(rule.surgeMinMultiplier, demandMultiplier))
-  let suggestedFare = round2(subtotal * clampedMultiplier)
+  let suggestedFare = multiplyMoney(subtotal, clampedMultiplier, currencyCode)
   suggestedFare = Math.max(rule.minimumFare, suggestedFare)
   if (rule.maximumFare != null) suggestedFare = Math.min(rule.maximumFare, suggestedFare)
 
@@ -87,10 +92,10 @@ export async function computeFare(input: {
   const clampRange = (v: number) => {
     let clamped = Math.max(rule.minimumFare, v)
     if (rule.maximumFare != null) clamped = Math.min(rule.maximumFare, clamped)
-    return round2(clamped)
+    return roundMoney(clamped, currencyCode)
   }
-  const typicalRangeLow = clampRange(suggestedFare * (1 - rangeSpreadPct))
-  const typicalRangeHigh = clampRange(suggestedFare * (1 + rangeSpreadPct))
+  const typicalRangeLow = clampRange(multiplyMoney(suggestedFare, 1 - rangeSpreadPct, currencyCode))
+  const typicalRangeHigh = clampRange(multiplyMoney(suggestedFare, 1 + rangeSpreadPct, currencyCode))
 
   return {
     baseFare,
@@ -120,8 +125,4 @@ export function assertFareWithinGuardrails(fare: number, rule: { minimumFare: nu
   if (rule.maximumFare != null && fare > rule.maximumFare) {
     throw ApiError.badRequest("FARE_ABOVE_MAXIMUM", `Fare cannot exceed the maximum of Rs ${rule.maximumFare}.`)
   }
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
 }

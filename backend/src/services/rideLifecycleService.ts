@@ -8,6 +8,7 @@ import { emitToRide, emitToUser, emitToAdmin } from "../realtime/socket.js"
 import { recordDriverRideForIncentives } from "./incentiveService.js"
 import { qualifyReferralOnFirstRide } from "./referralService.js"
 import { checkCancellationRiskSignal } from "./riskService.js"
+import { addMoney, subtractMoney, multiplyMoney, roundMoney } from "../utils/money.js"
 
 async function loadRideWithParties(rideId: string) {
   const ride = await prisma.ride.findUnique({
@@ -209,19 +210,25 @@ async function completeRide(rideId: string) {
 
   const rule = await resolveFareRule(ride.rideRequest.cityId, ride.rideRequest.vehicleTypeId, ride.rideRequest.zoneId)
   const finalFare = ride.agreedFare // MVP: the agreed/negotiated price is final — see docs for rationale
+  // Currency-aware from here on (Phase 5 §2) — round2() alone assumed
+  // every currency uses 2 decimals, which is wrong for JPY (0) and
+  // KWD/BHD (3); and a chained `a * b + c` computed in raw floats can
+  // drift before rounding ever sees it. addMoney/multiplyMoney convert
+  // to the currency's own integer minor-unit for each step instead.
+  const currencyCode = ride.driver.city.currencyCode
   // Commission Engine (Phase 3 §26): percentage + optional flat fee, both
   // admin-configurable per city/vehicle-type — never hard-coded here.
-  const commissionAmount = round2(finalFare * rule.commissionRate + rule.commissionFlatFee)
+  const commissionAmount = addMoney(multiplyMoney(finalFare, rule.commissionRate, currencyCode), rule.commissionFlatFee, currencyCode)
   // A promo discount reduces what the passenger is charged; the platform
   // absorbs it as a marketing cost rather than reducing the driver's
   // payout, so driverPayout is computed off the full fare regardless.
-  const discountAmount = round2(ride.rideRequest.discountAmount ?? 0)
-  const driverPayout = round2(finalFare - commissionAmount)
+  const discountAmount = roundMoney(ride.rideRequest.discountAmount ?? 0, currencyCode)
+  const driverPayout = subtractMoney(finalFare, commissionAmount, currencyCode)
   const durationMin =
     ride.startedAt && ride.completedAt ? Math.max(1, Math.round((ride.completedAt.getTime() - ride.startedAt.getTime()) / 60_000)) : null
 
   const provider = getPaymentProvider(ride.paymentMethod)
-  const authResult = await provider.authorize(finalFare - discountAmount, ride.id)
+  const authResult = await provider.authorize(subtractMoney(finalFare, discountAmount, currencyCode), ride.id)
   const captureResult = await provider.capture(authResult.providerReference)
 
   await prisma.$transaction(async (tx) => {
@@ -247,14 +254,14 @@ async function completeRide(rideId: string) {
       })
     }
 
-    await tx.commission.create({ data: { paymentId: payment.id, rate: rule.commissionRate, amount: commissionAmount } })
+    await tx.commission.create({ data: { paymentId: payment.id, rate: rule.commissionRate, amount: commissionAmount, currencyCode } })
 
     const wallet = await tx.wallet.upsert({
       where: { userId: ride.driver.userId },
-      create: { userId: ride.driver.userId, balance: 0, currencyCode: ride.driver.city.currencyCode },
+      create: { userId: ride.driver.userId, balance: 0, currencyCode },
       update: {},
     })
-    const newBalance = round2(wallet.balance + driverPayout)
+    const newBalance = addMoney(wallet.balance, driverPayout, currencyCode)
     await tx.wallet.update({ where: { id: wallet.id }, data: { balance: newBalance } })
     await tx.transaction.create({
       data: {
@@ -263,6 +270,7 @@ async function completeRide(rideId: string) {
         type: "ride_payout",
         amount: driverPayout,
         balanceAfter: newBalance,
+        currencyCode,
         description: `Ride ${ride.id.slice(0, 8)} payout`,
       },
     })
@@ -283,8 +291,4 @@ async function completeRide(rideId: string) {
   ])
 
   return { finalFare, commissionAmount, driverPayout }
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
 }

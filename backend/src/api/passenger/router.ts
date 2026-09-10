@@ -172,6 +172,7 @@ passengerRouter.post(
           type: "wallet_topup",
           amount: req.body.amount,
           balanceAfter: newBalance,
+          currencyCode: wallet.currencyCode,
           description: `Wallet top-up via ${req.body.method}`,
         },
       }),

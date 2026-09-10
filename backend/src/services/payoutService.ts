@@ -36,7 +36,7 @@ export async function requestPayout(driverUserId: string, driverId: string, amou
     if (claimed.count === 0) {
       throw ApiError.badRequest("INSUFFICIENT_BALANCE", "Your available balance is lower than the requested payout amount.")
     }
-    return tx.payoutRequest.create({ data: { driverId, amount: rounded, method, status: "requested" } })
+    return tx.payoutRequest.create({ data: { driverId, amount: rounded, currencyCode: wallet.currencyCode, method, status: "requested" } })
   })
 }
 

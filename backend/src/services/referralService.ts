@@ -5,10 +5,7 @@ import { getSetting } from "../config/settings.js"
 import { notify } from "./notifications/NotificationService.js"
 import { recordRiskEvent } from "./riskService.js"
 import { resolveUserCurrency } from "../shared/currency.js"
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
-}
+import { addMoney } from "../utils/money.js"
 
 function codeFromName(fullName: string): string {
   const base = fullName.replace(/[^a-zA-Z]/g, "").slice(0, 6).toUpperCase() || "RIVO"
@@ -111,10 +108,10 @@ export async function qualifyReferralOnFirstRide(referredUserId: string): Promis
         create: { userId, balance: 0, currencyCode: currencyByUser.get(userId)! },
         update: {},
       })
-      const newBalance = round2(wallet.balance + amount)
+      const newBalance = addMoney(wallet.balance, amount, wallet.currencyCode)
       await tx.wallet.update({ where: { id: wallet.id }, data: { balance: newBalance } })
       await tx.transaction.create({
-        data: { walletId: wallet.id, type: "referral_reward", amount, balanceAfter: newBalance, description: "Referral reward" },
+        data: { walletId: wallet.id, type: "referral_reward", amount, balanceAfter: newBalance, currencyCode: wallet.currencyCode, description: "Referral reward" },
       })
     }
   })

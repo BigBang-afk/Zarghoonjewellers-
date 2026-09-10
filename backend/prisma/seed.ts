@@ -277,7 +277,7 @@ async function main() {
     if (startingBalance > 0) {
       const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: user.id } })
       await prisma.transaction.create({
-        data: { walletId: wallet.id, type: "wallet_topup", amount: startingBalance, balanceAfter: startingBalance, description: "[SEED] Initial wallet top-up" },
+        data: { walletId: wallet.id, type: "wallet_topup", amount: startingBalance, balanceAfter: startingBalance, currencyCode: "PKR", description: "[SEED] Initial wallet top-up" },
       })
     }
     await prisma.referralCode.create({ data: { userId: user.id, code: `PSGR${String(i + 1).padStart(3, "0")}` } })
@@ -487,13 +487,13 @@ async function main() {
         amount: fare, currencyCode: "PKR", providerReference: `seed_pay_${i}`, capturedAt: completedAt, createdAt: completedAt,
       },
     })
-    await prisma.commission.create({ data: { paymentId: payment.id, rate: 0.15, amount: commissionAmount } })
+    await prisma.commission.create({ data: { paymentId: payment.id, rate: 0.15, amount: commissionAmount, currencyCode: "PKR" } })
 
     const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: driver.userId } })
     const newBalance = round2(wallet.balance + driverPayout)
     await prisma.wallet.update({ where: { id: wallet.id }, data: { balance: newBalance } })
     await prisma.transaction.create({
-      data: { walletId: wallet.id, paymentId: payment.id, type: "ride_payout", amount: driverPayout, balanceAfter: newBalance, description: `[SEED] Ride ${ride.id.slice(0, 8)} payout`, createdAt: completedAt },
+      data: { walletId: wallet.id, paymentId: payment.id, type: "ride_payout", amount: driverPayout, balanceAfter: newBalance, currencyCode: "PKR", description: `[SEED] Ride ${ride.id.slice(0, 8)} payout`, createdAt: completedAt },
     })
 
     await prisma.driverProfile.update({ where: { id: driver.id }, data: { completedRides: { increment: 1 } } })
@@ -718,7 +718,7 @@ async function main() {
     const rewardedWallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: incentiveDrivers[2].userId } })
     const newBal = round2(rewardedWallet.balance + 1000)
     await prisma.wallet.update({ where: { id: rewardedWallet.id }, data: { balance: newBal } })
-    await prisma.transaction.create({ data: { walletId: rewardedWallet.id, type: "incentive_bonus", amount: 1000, balanceAfter: newBal, description: "[SEED] Weekend Rush Bonus reward" } })
+    await prisma.transaction.create({ data: { walletId: rewardedWallet.id, type: "incentive_bonus", amount: 1000, balanceAfter: newBal, currencyCode: "PKR", description: "[SEED] Weekend Rush Bonus reward" } })
   }
 
   // ---------------------------------------------------------------------
