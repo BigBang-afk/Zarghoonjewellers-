@@ -2,20 +2,69 @@ import { useEffect, useState } from "react"
 import { Clock, Route, Star, Trophy, Wallet, Zap } from "lucide-react"
 import { Card } from "../../components/ui/Card"
 import { LoadingState } from "../../components/ui/States"
+import { Button } from "../../components/ui/Button"
 import { driverApi } from "../../api/driver"
 import { useToast, errorMessage } from "../../shared/Toast"
-import type { DriverEarningsSummary, DriverIncentiveSummary } from "../../types"
+import type { DriverEarningsSummary, DriverIncentiveSummary, PayoutRequest } from "../../types"
+
+const PAYOUT_STATUS_LABEL: Record<PayoutRequest["status"], string> = {
+  requested: "Requested",
+  processing: "Processing",
+  completed: "Paid out",
+  failed: "Failed",
+  cancelled: "Cancelled",
+}
 
 export function EarningsPanel() {
   const [data, setData] = useState<DriverEarningsSummary | null>(null)
   const [incentives, setIncentives] = useState<DriverIncentiveSummary | null>(null)
+  const [payouts, setPayouts] = useState<PayoutRequest[]>([])
+  const [payoutAmount, setPayoutAmount] = useState("")
+  const [payoutMethod, setPayoutMethod] = useState<"card" | "local_provider">("local_provider")
+  const [requesting, setRequesting] = useState(false)
   const { push } = useToast()
+
+  function loadPayouts() {
+    driverApi.payouts().then((r) => setPayouts(r.payouts)).catch(() => {})
+  }
 
   useEffect(() => {
     driverApi.earnings().then(setData).catch((err) => push("error", errorMessage(err)))
     driverApi.incentives().then(setIncentives).catch(() => {})
+    loadPayouts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function handleRequestPayout() {
+    const amount = Number(payoutAmount)
+    if (!amount || amount <= 0) {
+      push("error", "Enter a valid amount.")
+      return
+    }
+    setRequesting(true)
+    try {
+      await driverApi.requestPayout(amount, payoutMethod)
+      push("success", "Payout requested.")
+      setPayoutAmount("")
+      loadPayouts()
+      driverApi.earnings().then(setData).catch(() => {})
+    } catch (err) {
+      push("error", errorMessage(err))
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  async function handleCancelPayout(id: string) {
+    try {
+      await driverApi.cancelPayout(id)
+      push("success", "Payout request cancelled.")
+      loadPayouts()
+      driverApi.earnings().then(setData).catch(() => {})
+    } catch (err) {
+      push("error", errorMessage(err))
+    }
+  }
 
   if (!data) return <LoadingState label="Loading earnings…" />
 
@@ -28,6 +77,16 @@ export function EarningsPanel() {
       <Card className="mt-3 p-5">
         <p className="text-xs text-ink-700/60">Wallet balance</p>
         <p className="font-display text-3xl font-extrabold text-rivo-600">Rs {data.walletBalanceRs.toLocaleString()}</p>
+        <div className="mt-3 flex gap-4 border-t border-ink-900/[0.06] pt-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-ink-700/50">Pending payout</p>
+            <p className="text-sm font-bold">Rs {data.pendingBalanceRs.toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-ink-700/50">Lifetime paid out</p>
+            <p className="text-sm font-bold">Rs {data.paidBalanceRs.toLocaleString()}</p>
+          </div>
+        </div>
       </Card>
 
       <div className="mt-3 grid grid-cols-3 gap-2.5">
@@ -101,9 +160,66 @@ export function EarningsPanel() {
         </>
       )}
 
+      <p className="mb-2 mt-5 text-xs font-bold uppercase tracking-wide text-ink-700/50">Withdraw earnings</p>
+      <Card className="p-4">
+        <div className="flex gap-2">
+          <input
+            type="number"
+            inputMode="decimal"
+            placeholder="Amount"
+            value={payoutAmount}
+            onChange={(e) => setPayoutAmount(e.target.value)}
+            max={data.walletBalanceRs}
+            className="h-11 flex-1 rounded-xl border border-ink-900/10 bg-white px-3 text-sm outline-none focus:border-rivo-500"
+          />
+          <select
+            value={payoutMethod}
+            onChange={(e) => setPayoutMethod(e.target.value as "card" | "local_provider")}
+            className="h-11 rounded-xl border border-ink-900/10 bg-white px-2 text-sm outline-none focus:border-rivo-500"
+          >
+            <option value="local_provider">Bank / mobile wallet</option>
+            <option value="card">Card</option>
+          </select>
+        </div>
+        <Button
+          className="mt-2.5 w-full"
+          size="sm"
+          disabled={requesting || data.walletBalanceRs <= 0}
+          onClick={handleRequestPayout}
+        >
+          Request payout
+        </Button>
+        <p className="mt-2 text-[10px] text-ink-700/50">
+          Requesting moves the amount from your available balance into pending until an admin confirms the transfer completed.
+        </p>
+      </Card>
+
+      {payouts.length > 0 && (
+        <>
+          <p className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-ink-700/50">Payout history</p>
+          <div className="space-y-2">
+            {payouts.map((p) => (
+              <Card key={p.id} className="flex items-center justify-between p-3">
+                <div>
+                  <p className="text-sm font-bold">Rs {p.amount.toLocaleString()}</p>
+                  <p className="text-[10px] text-ink-700/50">
+                    {PAYOUT_STATUS_LABEL[p.status]} · {new Date(p.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                {p.status === "requested" && (
+                  <Button variant="ghost" size="sm" onClick={() => handleCancelPayout(p.id)}>
+                    Cancel
+                  </Button>
+                )}
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="mt-4 flex items-center gap-2 rounded-xl bg-ink-900/[0.03] p-3 text-xs text-ink-700/60">
         <Wallet className="h-4 w-4 shrink-0" />
-        Payouts are recorded per completed ride as soon as it ends — withdrawal to a bank/mobile-wallet method is a Phase 4 feature.
+        Payouts are recorded per completed ride as soon as it ends. A withdrawal request is confirmed once an admin verifies the transfer with the payment provider.
       </div>
     </div>
   )

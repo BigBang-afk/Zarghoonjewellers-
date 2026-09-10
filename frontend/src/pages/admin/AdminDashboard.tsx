@@ -108,16 +108,24 @@ export function AdminDashboard() {
   const [cities, setCities] = useState<(City & { _count: { driverProfiles: number; serviceZones: number } })[]>([])
   const [mapDrivers, setMapDrivers] = useState<{ id: string; status: string; lat: number; lng: number }[]>([])
   const [liveOps, setLiveOps] = useState<Awaited<ReturnType<typeof adminApi.liveOpsSummary>> | null>(null)
+  const [supply, setSupply] = useState<Awaited<ReturnType<typeof adminApi.supplyDashboard>> | null>(null)
   const [error, setError] = useState(false)
 
   async function loadDashboard() {
     setError(false)
     try {
-      const [k, c, m, ops] = await Promise.all([adminApi.kpis(), adminApi.cities(), adminApi.liveMap(), adminApi.liveOpsSummary()])
+      const [k, c, m, ops, sup] = await Promise.all([
+        adminApi.kpis(),
+        adminApi.cities(),
+        adminApi.liveMap(),
+        adminApi.liveOpsSummary(),
+        adminApi.supplyDashboard(),
+      ])
       setKpis(k)
       setCities(c.cities)
       setMapDrivers(m.drivers)
       setLiveOps(ops)
+      setSupply(sup)
     } catch (err) {
       setError(true)
       push("error", errorMessage(err))
@@ -220,6 +228,34 @@ export function AdminDashboard() {
                     <Badge key={b.label} tone={b.tone as "danger" | "warning" | "neutral"} dot>
                       {b.label}
                     </Badge>
+                  ))}
+                </div>
+              )}
+
+              {supply && supply.alerts.length > 0 && (
+                <div className="mb-4 space-y-1.5">
+                  {supply.alerts.map((a, i) => (
+                    <div key={i} className="rounded-xl border border-gold-400/40 bg-gold-400/10 px-3.5 py-2.5 text-xs font-semibold text-ink-900">
+                      {a}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {supply && (
+                <div className="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                  {[
+                    { label: "Online", value: supply.onlineDrivers },
+                    { label: "Available", value: supply.availableDrivers },
+                    { label: "Busy", value: supply.busyDrivers },
+                    { label: "Offline", value: supply.offlineDrivers },
+                    { label: "Stale GPS", value: supply.staleGpsDrivers },
+                    { label: "Open requests", value: supply.openRequestsCount },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-xl bg-white px-3 py-2.5 text-center shadow-rivo-sm">
+                      <p className="text-lg font-extrabold">{s.value}</p>
+                      <p className="text-[10px] uppercase tracking-wide text-ink-700/50">{s.label}</p>
+                    </div>
                   ))}
                 </div>
               )}

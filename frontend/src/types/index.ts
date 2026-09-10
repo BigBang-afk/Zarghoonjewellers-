@@ -138,6 +138,8 @@ export interface NotificationItem {
 
 export interface DriverEarningsSummary {
   walletBalanceRs: number
+  pendingBalanceRs: number
+  paidBalanceRs: number
   today: { totalRs: number; rides: number; averageFareRs: number }
   week: { totalRs: number; rides: number; averageFareRs: number }
   month: { totalRs: number; rides: number; averageFareRs: number }
@@ -152,6 +154,18 @@ export interface DriverEarningsSummary {
   acceptanceRate: number
   cancellationRate: number
   rating: number
+}
+
+export interface PayoutRequest {
+  id: string
+  driverId: string
+  amount: number
+  method: string
+  status: "requested" | "processing" | "completed" | "failed" | "cancelled"
+  reference: string | null
+  notes: string | null
+  createdAt: string
+  processedAt: string | null
 }
 
 export interface DriverIncentiveSummary {

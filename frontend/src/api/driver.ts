@@ -1,13 +1,13 @@
 import { api } from "./client"
-import type { DriverEarningsSummary, DriverIncentiveSummary, IncomingRequestSummary, RideSummary } from "../types"
+import type { DriverEarningsSummary, DriverIncentiveSummary, IncomingRequestSummary, PayoutRequest, RideSummary } from "../types"
 
 export const driverApi = {
   me: () => api.get<{ driverProfile: Record<string, unknown> }>("/driver/me"),
   setAvailability: (status: "online" | "offline") => api.patch<{ driverProfile: Record<string, unknown> }>("/driver/me/availability", { status }),
   updateLocation: (lat: number, lng: number, accuracyMeters?: number) => api.patch<void>("/driver/me/location", { lat, lng, accuracyMeters }),
-  payouts: () => api.get<{ payouts: unknown[] }>("/driver/me/payouts"),
-  requestPayout: (amount: number, method: string) => api.post<{ payout: unknown }>("/driver/me/payouts", { amount, method }),
-  cancelPayout: (id: string) => api.post<{ payout: unknown }>(`/driver/me/payouts/${id}/cancel`),
+  payouts: () => api.get<{ payouts: PayoutRequest[] }>("/driver/me/payouts"),
+  requestPayout: (amount: number, method: string) => api.post<{ payout: PayoutRequest }>("/driver/me/payouts", { amount, method }),
+  cancelPayout: (id: string) => api.post<{ payout: PayoutRequest }>(`/driver/me/payouts/${id}/cancel`),
   incomingRequests: () => api.get<{ offers: IncomingRequestSummary[] }>("/driver/me/incoming-requests"),
   activeRide: () => api.get<{ ride: RideSummary | null }>("/driver/me/active-ride"),
   earnings: () => api.get<DriverEarningsSummary>("/driver/me/earnings"),

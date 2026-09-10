@@ -30,4 +30,15 @@ export const adminApi = {
       openDisputes: number
       openSupportTickets: number
     }>("/admin/live-ops/summary", cityId ? { cityId } : undefined),
+  supplyDashboard: (cityId?: string) =>
+    api.get<{
+      onlineDrivers: number
+      availableDrivers: number
+      busyDrivers: number
+      offlineDrivers: number
+      staleGpsDrivers: number
+      driversAwaitingVerification: number
+      openRequestsCount: number
+      alerts: string[]
+    }>("/admin/supply/dashboard", cityId ? { cityId } : undefined),
 }
