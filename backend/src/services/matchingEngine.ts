@@ -59,6 +59,7 @@ export async function findEligibleDrivers(params: {
   vehicleTypeId: string
   pickup: { lat: number; lng: number }
   excludeDriverIds?: string[]
+  excludeUserIds?: string[]
   favoriteDriverIds?: string[]
   limit?: number
 }): Promise<{ candidates: MatchCandidate[]; radiusUsedKm: number; staleExcludedCount: number }> {
@@ -88,6 +89,7 @@ export async function findEligibleDrivers(params: {
         verificationStatus: "approved",
         deletedAt: null,
         id: { notIn: params.excludeDriverIds ?? [] },
+        userId: { notIn: params.excludeUserIds ?? [] },
         vehicles: { some: { vehicleTypeId: params.vehicleTypeId, status: "active" } },
       },
     }),
@@ -98,6 +100,7 @@ export async function findEligibleDrivers(params: {
         verificationStatus: "approved",
         deletedAt: null,
         id: { notIn: params.excludeDriverIds ?? [] },
+        userId: { notIn: params.excludeUserIds ?? [] },
         lastLat: { not: null },
         lastLng: { not: null },
         lastLocationAt: { gte: staleCutoff },

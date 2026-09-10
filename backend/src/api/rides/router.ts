@@ -343,6 +343,43 @@ ridesRouter.post(
 )
 
 ridesRouter.post(
+  "/rides/:id/disputes",
+  requireRole("passenger", "driver"),
+  validateBody(
+    z.object({
+      reason: z.string().trim().min(1).max(500),
+      evidence: z.array(z.string().trim().max(300)).max(10).optional(),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    const ride = await serializeRide(req.params.id)
+    assertRideParty(ride, req.auth!.userId, req.auth!.role)
+    const againstUserId = ride.passenger.userId === req.auth!.userId ? ride.driver.userId : ride.passenger.userId
+    const dispute = await prisma.dispute.create({
+      data: {
+        rideId: ride.id,
+        raisedById: req.auth!.userId,
+        againstUserId,
+        reason: req.body.reason,
+        evidence: req.body.evidence ? JSON.stringify(req.body.evidence) : null,
+      },
+    })
+    emitToRide(ride.id, "dispute.filed", { disputeId: dispute.id })
+    res.status(201).json({ dispute })
+  }),
+)
+
+ridesRouter.get(
+  "/rides/:id/disputes",
+  asyncHandler(async (req, res) => {
+    const ride = await serializeRide(req.params.id)
+    assertRideParty(ride, req.auth!.userId, req.auth!.role)
+    const disputes = await prisma.dispute.findMany({ where: { rideId: ride.id }, orderBy: { createdAt: "desc" } })
+    res.json({ disputes })
+  }),
+)
+
+ridesRouter.post(
   "/rides/:id/ratings",
   requireRole("passenger", "driver"),
   validateBody(z.object({ score: z.number().int().min(1).max(5), comment: z.string().trim().max(500).optional() })),

@@ -6,6 +6,7 @@ import { validateBody } from "../../middleware/validate.js"
 import { ApiError } from "../../utils/apiError.js"
 import { writeAuditLog } from "../../shared/audit.js"
 import { notify } from "../../services/notifications/NotificationService.js"
+import { getSetting } from "../../config/settings.js"
 
 export const adminVerificationRouter = Router()
 
@@ -57,6 +58,31 @@ adminVerificationRouter.post(
     })
 
     res.json({ driverProfile: updated })
+  }),
+)
+
+/** Documents nearing or past expiry (Phase 3 §17) — the same window the background sweep uses. */
+adminVerificationRouter.get(
+  "/drivers/document-expiry-queue",
+  asyncHandler(async (_req, res) => {
+    const warningDays = await getSetting("verification.documentExpiryWarningDays")
+    const cutoff = new Date(Date.now() + warningDays * 86_400_000)
+    const [driverDocs, vehicleDocs] = await Promise.all([
+      prisma.driverDocument.findMany({
+        where: { status: { in: ["approved", "expired"] }, expiresAt: { lte: cutoff } },
+        include: { driver: { include: { user: true } } },
+        orderBy: { expiresAt: "asc" },
+      }),
+      prisma.vehicleDocument.findMany({
+        where: { status: { in: ["approved", "expired"] }, expiresAt: { lte: cutoff } },
+        include: { vehicle: { include: { driver: { include: { user: true } } } } },
+        orderBy: { expiresAt: "asc" },
+      }),
+    ])
+    res.json({
+      driverDocuments: driverDocs.map((d) => ({ id: d.id, driverId: d.driverId, driverName: d.driver.user.fullName, docType: d.docType, status: d.status, expiresAt: d.expiresAt })),
+      vehicleDocuments: vehicleDocs.map((d) => ({ id: d.id, vehicleId: d.vehicleId, driverName: d.vehicle.driver.user.fullName, docType: d.docType, status: d.status, expiresAt: d.expiresAt })),
+    })
   }),
 )
 

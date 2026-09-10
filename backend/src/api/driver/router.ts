@@ -9,6 +9,8 @@ import { ApiError } from "../../utils/apiError.js"
 import { emitToAdmin } from "../../realtime/socket.js"
 import { checkImpossibleMovement } from "../../services/riskService.js"
 import { getDriverIncentiveSummary } from "../../services/incentiveService.js"
+import { submitDriverDocument } from "../../services/verificationService.js"
+import { DocType } from "../../types/enums.js"
 
 export const driverRouter = Router()
 driverRouter.use(requireAuth, requireRole("driver"))
@@ -277,6 +279,35 @@ driverRouter.get(
       prisma.transaction.count({ where }),
     ])
     res.json({ transactions, total, page: Number(page) || 1, pageSize: take })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Trust & verification (Phase 3 §16-17)
+// ---------------------------------------------------------------------
+
+driverRouter.get(
+  "/me/documents",
+  asyncHandler(async (req, res) => {
+    const driver = await getDriverProfileOrThrow(req.auth!.userId)
+    const documents = await prisma.driverDocument.findMany({ where: { driverId: driver.id }, orderBy: { createdAt: "desc" } })
+    res.json({ documents })
+  }),
+)
+
+driverRouter.post(
+  "/me/documents",
+  validateBody(
+    z.object({
+      docType: z.enum(DocType),
+      fileUrl: z.string().trim().min(1).max(500),
+      expiresAt: z.coerce.date().optional(),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    const driver = await getDriverProfileOrThrow(req.auth!.userId)
+    const document = await submitDriverDocument({ driverId: driver.id, ...req.body })
+    res.status(201).json({ document })
   }),
 )
 

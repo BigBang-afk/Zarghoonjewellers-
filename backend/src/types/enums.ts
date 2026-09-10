@@ -65,7 +65,7 @@ export const TransactionType = [
 ] as const
 export type TransactionType = (typeof TransactionType)[number]
 
-export const NotificationType = ["ride_update", "offer_update", "promo", "system", "safety"] as const
+export const NotificationType = ["ride_update", "offer_update", "promo", "system", "safety", "payment", "support"] as const
 export type NotificationType = (typeof NotificationType)[number]
 
 export const DiscountType = ["percentage", "flat"] as const
@@ -89,7 +89,7 @@ export type SupportCategory = (typeof SupportCategory)[number]
 export const TicketPriority = ["low", "medium", "high", "urgent"] as const
 export type TicketPriority = (typeof TicketPriority)[number]
 
-export const DisputeStatus = ["open", "under_review", "resolved", "rejected"] as const
+export const DisputeStatus = ["open", "under_review", "awaiting_info", "resolved", "rejected", "closed"] as const
 export type DisputeStatus = (typeof DisputeStatus)[number]
 
 export const SafetyEventType = ["sos", "trip_shared", "report_filed", "suspicious_activity", "ride_deviation"] as const

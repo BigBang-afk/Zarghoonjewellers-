@@ -6,6 +6,7 @@ import { validateBody } from "../../middleware/validate.js"
 import { requireAuth } from "../../middleware/auth.js"
 import { ApiError } from "../../utils/apiError.js"
 import { emitToAdmin } from "../../realtime/socket.js"
+import { blockUser, unblockUser, listBlocks } from "../../services/safetyService.js"
 
 export const safetyRouter = Router()
 /** No auth — a trusted contact opening a shared trip link never has a RIVO account. */
@@ -51,6 +52,7 @@ safetyRouter.post(
       rideId: z.string().uuid(),
       againstUserId: z.string().uuid(),
       reason: z.string().trim().min(1).max(500),
+      evidence: z.array(z.string().trim().max(300)).max(10).optional(),
     }),
   ),
   asyncHandler(async (req, res) => {
@@ -61,7 +63,13 @@ safetyRouter.post(
 
     const [dispute, safetyEvent] = await prisma.$transaction([
       prisma.dispute.create({
-        data: { rideId: ride.id, raisedById: req.auth!.userId, againstUserId: req.body.againstUserId, reason: req.body.reason },
+        data: {
+          rideId: ride.id,
+          raisedById: req.auth!.userId,
+          againstUserId: req.body.againstUserId,
+          reason: req.body.reason,
+          evidence: req.body.evidence ? JSON.stringify(req.body.evidence) : null,
+        },
       }),
       prisma.safetyEvent.create({
         data: { rideId: ride.id, userId: req.auth!.userId, type: "report_filed", severity: "medium", details: JSON.stringify({ reason: req.body.reason }) },
@@ -70,6 +78,36 @@ safetyRouter.post(
 
     emitToAdmin("safety.report_filed", { disputeId: dispute.id, safetyEventId: safetyEvent.id })
     res.status(201).json({ dispute, safetyEvent })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Blocking (Phase 3 §15) — only between two people who shared a ride;
+// affects future matching only, never a platform-wide penalty.
+// ---------------------------------------------------------------------
+
+safetyRouter.get(
+  "/blocks",
+  asyncHandler(async (req, res) => {
+    const blocks = await listBlocks(req.auth!.userId)
+    res.json({ blocks })
+  }),
+)
+
+safetyRouter.post(
+  "/blocks/:userId",
+  validateBody(z.object({ reason: z.string().trim().max(300).optional() })),
+  asyncHandler(async (req, res) => {
+    const block = await blockUser(req.auth!.userId, req.params.userId, req.body.reason)
+    res.status(201).json({ block })
+  }),
+)
+
+safetyRouter.delete(
+  "/blocks/:userId",
+  asyncHandler(async (req, res) => {
+    await unblockUser(req.auth!.userId, req.params.userId)
+    res.status(204).send()
   }),
 )
 

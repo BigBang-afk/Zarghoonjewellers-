@@ -5,6 +5,7 @@ import { mapProvider } from "./maps/HaversineMapProvider.js"
 import { computeFare, assertFareWithinGuardrails } from "./fareEngine.js"
 import { findEligibleDrivers } from "./matchingEngine.js"
 import { validatePromoCode, recordPromoRedemption } from "./promoService.js"
+import { getMutuallyBlockedUserIds } from "./safetyService.js"
 import { notify } from "./notifications/NotificationService.js"
 import { emitToUser, emitToAdmin } from "../realtime/socket.js"
 import type { BookingMode, PaymentMethod } from "../types/enums.js"
@@ -128,12 +129,15 @@ export async function dispatchQuickMatchNext(rideRequestId: string) {
   const pickup = await prisma.location.findUniqueOrThrow({ where: { id: request.pickupLocationId } })
   const exclude = await alreadyContactedDriverIds(rideRequestId)
   const favoriteDriverIds = request.preferFavoriteDriver ? await getFavoriteDriverIds(request.passengerId) : undefined
+  const passengerForBlocks = await prisma.passengerProfile.findUniqueOrThrow({ where: { id: request.passengerId } })
+  const excludeUserIds = await getMutuallyBlockedUserIds(passengerForBlocks.userId)
 
   const { candidates, staleExcludedCount } = await findEligibleDrivers({
     cityId: request.cityId,
     vehicleTypeId: request.vehicleTypeId,
     pickup: { lat: pickup.lat, lng: pickup.lng },
     excludeDriverIds: exclude,
+    excludeUserIds,
     favoriteDriverIds,
     limit: 1,
   })
@@ -191,11 +195,14 @@ export async function dispatchCompetitiveBroadcast(rideRequestId: string) {
     getSetting("negotiation.offerExpirySec"),
   ])
   const favoriteDriverIds = request.preferFavoriteDriver ? await getFavoriteDriverIds(request.passengerId) : undefined
+  const passengerForBlocks = await prisma.passengerProfile.findUniqueOrThrow({ where: { id: request.passengerId } })
+  const excludeUserIds = await getMutuallyBlockedUserIds(passengerForBlocks.userId)
 
   const { candidates } = await findEligibleDrivers({
     cityId: request.cityId,
     vehicleTypeId: request.vehicleTypeId,
     pickup: { lat: pickup.lat, lng: pickup.lng },
+    excludeUserIds,
     favoriteDriverIds,
     limit: maxDrivers,
   })

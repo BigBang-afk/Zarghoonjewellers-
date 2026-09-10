@@ -5,7 +5,7 @@ import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
 import { ApiError } from "../../utils/apiError.js"
 import { writeAuditLog } from "../../shared/audit.js"
-import { notify } from "../../services/notifications/NotificationService.js"
+import { requestMoreInfo, refundDispute, adjustDriverPayout, closeDispute } from "../../services/disputeService.js"
 
 export const adminTrustRouter = Router()
 
@@ -33,19 +33,49 @@ adminTrustRouter.get(
   }),
 )
 
+/**
+ * Dispute resolution (Phase 3 §19) — five distinct admin actions instead
+ * of a single opaque "resolve", each leaving its own audit-log entry:
+ * request more info, refund the passenger, adjust the driver's payout,
+ * or close the dispute with no monetary action.
+ */
 adminTrustRouter.post(
-  "/disputes/:id/resolve",
-  validateBody(z.object({ resolution: z.string().trim().min(1).max(500), status: z.enum(["resolved", "rejected"]) })),
+  "/disputes/:id/request-info",
+  validateBody(z.object({ message: z.string().trim().min(1).max(500) })),
   asyncHandler(async (req, res) => {
-    const dispute = await prisma.dispute.findUnique({ where: { id: req.params.id } })
-    if (!dispute) throw ApiError.notFound("Dispute not found.")
-    const updated = await prisma.dispute.update({
-      where: { id: dispute.id },
-      data: { status: req.body.status, resolution: req.body.resolution, resolvedById: req.auth!.userId, resolvedAt: new Date() },
-    })
-    await writeAuditLog({ req, action: "dispute.resolve", targetTable: "disputes", targetId: dispute.id, after: req.body })
-    await notify({ userId: dispute.raisedById, type: "system", title: "Dispute update", body: req.body.resolution })
-    res.json({ dispute: updated })
+    const dispute = await requestMoreInfo(req.params.id, req.auth!.userId, req.body.message)
+    await writeAuditLog({ req, action: "dispute.request_info", targetTable: "disputes", targetId: dispute.id, after: req.body })
+    res.json({ dispute })
+  }),
+)
+
+adminTrustRouter.post(
+  "/disputes/:id/refund",
+  validateBody(z.object({ amountRs: z.number().positive().optional(), resolution: z.string().trim().min(1).max(500) })),
+  asyncHandler(async (req, res) => {
+    const dispute = await refundDispute(req.params.id, req.auth!.userId, req.body.amountRs, req.body.resolution)
+    await writeAuditLog({ req, action: "dispute.refund", targetTable: "disputes", targetId: dispute.id, after: req.body })
+    res.json({ dispute })
+  }),
+)
+
+adminTrustRouter.post(
+  "/disputes/:id/adjust",
+  validateBody(z.object({ amountRs: z.number(), resolution: z.string().trim().min(1).max(500) })),
+  asyncHandler(async (req, res) => {
+    const dispute = await adjustDriverPayout(req.params.id, req.auth!.userId, req.body.amountRs, req.body.resolution)
+    await writeAuditLog({ req, action: "dispute.adjust", targetTable: "disputes", targetId: dispute.id, after: req.body })
+    res.json({ dispute })
+  }),
+)
+
+adminTrustRouter.post(
+  "/disputes/:id/close",
+  validateBody(z.object({ resolution: z.string().trim().min(1).max(500), status: z.enum(["closed", "rejected"]).default("closed") })),
+  asyncHandler(async (req, res) => {
+    const dispute = await closeDispute(req.params.id, req.auth!.userId, req.body.resolution, req.body.status)
+    await writeAuditLog({ req, action: `dispute.${req.body.status}`, targetTable: "disputes", targetId: dispute.id, after: req.body })
+    res.json({ dispute })
   }),
 )
 

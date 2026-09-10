@@ -14,6 +14,7 @@ import { notificationsRouter } from "./api/notifications/router.js"
 import { publicRouter } from "./api/public/router.js"
 import { accountRouter } from "./api/account/router.js"
 import { businessRouter } from "./api/business/router.js"
+import { supportRouter } from "./api/support/router.js"
 
 export function createApp() {
   const app = express()
@@ -36,6 +37,7 @@ export function createApp() {
   app.use("/v1/notifications", notificationsRouter)
   app.use("/v1/account", accountRouter)
   app.use("/v1/business", businessRouter)
+  app.use("/v1/support", supportRouter)
 
   app.use(notFoundHandler)
   app.use(errorHandler)

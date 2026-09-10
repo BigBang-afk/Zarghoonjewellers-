@@ -176,6 +176,8 @@ model User {
   reviewedVehicleDocs VehicleDocument[] @relation("VehicleDocReviewer")
   raisedDisputes    Dispute[] @relation("DisputeRaisedBy")
   resolvedDisputes  Dispute[] @relation("DisputeResolvedBy")
+  blocksInitiated   UserBlock[] @relation("BlockInitiator")
+  blocksReceived    UserBlock[] @relation("BlockTarget")
   ratingsGiven      Rating[] @relation("RatingRater")
   ratingsReceived   Rating[] @relation("RatingRatee")
   createdPromotions Promotion[]
@@ -265,6 +267,7 @@ model DriverDocument {
   reviewedAt        DateTime?
   rejectionReason   String?
   expiresAt         DateTime?
+  expiryWarnedAt    DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -314,6 +317,7 @@ model VehicleDocument {
   reviewedById    String?
   reviewedAt      DateTime?
   expiresAt       DateTime?
+  expiryWarnedAt  DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -776,7 +780,8 @@ model SupportTicket {
   @@map("support_tickets")
 }
 
-/// status: open | under_review | resolved | rejected
+/// status: open | under_review | awaiting_info | resolved | rejected | closed
+/// decision: refund_passenger | adjust_driver_payout | no_action
 model Dispute {
   id              String   @id @default(uuid())
   rideId          String
@@ -785,6 +790,7 @@ model Dispute {
   reason          String
   evidence        String?  // JSON-encoded string[] of attachment URLs/descriptions
   status          String   @default("open")
+  decision        String?
   resolution      String?
   resolvedById    String?
   resolvedAt      DateTime?
@@ -798,6 +804,24 @@ model Dispute {
   @@index([status])
   @@index([rideId])
   @@map("disputes")
+}
+
+/// A passenger or driver blocking a counterpart after riding together —
+/// never matched to each other again (Phase 3 §15). Not a punitive action
+/// against the blocked user elsewhere on the platform.
+model UserBlock {
+  id              String   @id @default(uuid())
+  blockerUserId   String
+  blockedUserId   String
+  reason          String?
+  createdAt       DateTime @default(now())
+
+  blocker         User     @relation("BlockInitiator", fields: [blockerUserId], references: [id])
+  blocked         User     @relation("BlockTarget", fields: [blockedUserId], references: [id])
+
+  @@unique([blockerUserId, blockedUserId])
+  @@index([blockedUserId])
+  @@map("user_blocks")
 }
 
 /// type: sos | trip_shared | report_filed | suspicious_activity | ride_deviation

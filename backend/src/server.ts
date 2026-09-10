@@ -4,6 +4,7 @@ import { env } from "./config/env.js"
 import { initSocket } from "./realtime/socket.js"
 import { sweepExpiredNegotiations } from "./services/negotiationEngine.js"
 import { dispatchDueScheduledRides } from "./services/scheduledRideService.js"
+import { sweepDocumentExpirations } from "./services/verificationService.js"
 
 const app = createApp()
 const httpServer = createServer(app)
@@ -29,6 +30,16 @@ setInterval(() => {
     console.error("Scheduled ride dispatch sweep failed:", err)
   })
 }, SCHEDULED_RIDE_SWEEP_INTERVAL_MS)
+
+// Document-expiration sweep (Phase 3 §17) — measured in days, so an
+// hourly cadence is more than enough responsiveness.
+const DOCUMENT_EXPIRY_SWEEP_INTERVAL_MS = 60 * 60_000
+setInterval(() => {
+  sweepDocumentExpirations().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error("Document expiration sweep failed:", err)
+  })
+}, DOCUMENT_EXPIRY_SWEEP_INTERVAL_MS)
 
 httpServer.listen(env.port, () => {
   // eslint-disable-next-line no-console
