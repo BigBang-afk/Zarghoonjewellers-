@@ -10,7 +10,14 @@ Phase 1 delivered the architecture and four static UI screens. **Phase 2 deliver
 real, working backend** (`/backend` — Node/TypeScript/Express/Prisma/Socket.IO) and
 wired the frontend (`/frontend`, renamed from `apps/web`) to it end-to-end — see
 [12 — Phase 2 Completion Report](./12-phase-2-completion-report.md) for exactly what's
-real, what's mocked, and how to run it.
+real, what's mocked, and how to run it. **Phase 3** added smart matching/pricing,
+wallet/promotions/referrals, driver incentives, scheduled and business rides, and a
+real trust/safety/dispute system — [13 — Phase 3 Completion Report](./13-phase-3-completion-report.md).
+**Phase 4** prepared the platform for a controlled pilot launch: multi-city +
+localization architecture, real payment/map/notification integration points,
+corporate accounts, growth/CMS/support/safety tooling, observability, data privacy,
+Pilot Mode, analytics v2, and a security review with real fixes applied —
+[20 — Phase 4 Completion Report](./20-phase-4-completion-report.md).
 
 ## Contents
 
@@ -35,6 +42,7 @@ real, what's mocked, and how to run it.
 | 17 | [Backup & Recovery](./17-backup-recovery.md) | Backup tooling, restore procedure, migration rollback |
 | 18 | [App Store Checklist](./18-app-store-checklist.md) | Honest checklist against what's actually ready for Play Store/App Store submission |
 | 19 | [Performance Targets](./19-performance-targets.md) | MVP latency/reliability/dispatch targets and the real instrumentation to check them |
+| 20 | [Phase 4 Completion Report](./20-phase-4-completion-report.md) | Multi-city, localization, payments/maps/notifications architecture, corporate accounts, growth/CMS/support/safety, observability, data privacy, Pilot Mode, analytics v2, security review, pilot-launch checklist |
 
 ## Phase 1 scope (architecture + 4 static screens)
 
