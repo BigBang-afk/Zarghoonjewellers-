@@ -50,6 +50,8 @@ adminConfigRouter.patch(
     z.object({
       status: z.enum(["planned", "launching", "live", "paused"]).optional(),
       name: z.string().trim().min(1).max(60).optional(),
+      /** JSON-encoded weekly schedule, e.g. {"mon":["00:00","23:59"],...}; omit/null = 24/7 */
+      operatingHours: z.string().nullable().optional(),
     }),
   ),
   asyncHandler(async (req, res) => {
@@ -58,6 +60,71 @@ adminConfigRouter.patch(
     const city = await prisma.city.update({ where: { id: req.params.id }, data: req.body })
     await writeAuditLog({ req, action: "city.update", targetTable: "cities", targetId: city.id, before, after: req.body })
     res.json({ city })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Vehicle categories — never hard-code one city's vehicle mix; each
+// city opts a vehicle type in/out via CityVehicleType.
+// ---------------------------------------------------------------------
+
+adminConfigRouter.get(
+  "/vehicle-types",
+  asyncHandler(async (_req, res) => {
+    const vehicleTypes = await prisma.vehicleType.findMany({ orderBy: { sortOrder: "asc" } })
+    res.json({ vehicleTypes })
+  }),
+)
+
+adminConfigRouter.post(
+  "/vehicle-types",
+  validateBody(
+    z.object({
+      code: z.string().trim().min(1).max(30),
+      name: z.string().trim().min(1).max(60),
+      capacity: z.number().int().positive().default(4),
+      sortOrder: z.number().int().default(0),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    const existing = await prisma.vehicleType.findUnique({ where: { code: req.body.code } })
+    if (existing) throw ApiError.conflict("VEHICLE_TYPE_EXISTS", "A vehicle type with this code already exists.")
+    const vehicleType = await prisma.vehicleType.create({ data: req.body })
+    await writeAuditLog({ req, action: "vehicle_type.create", targetTable: "vehicle_types", targetId: vehicleType.id, after: req.body })
+    res.status(201).json({ vehicleType })
+  }),
+)
+
+adminConfigRouter.patch(
+  "/vehicle-types/:id",
+  validateBody(
+    z.object({
+      name: z.string().trim().min(1).max(60).optional(),
+      capacity: z.number().int().positive().optional(),
+      sortOrder: z.number().int().optional(),
+      isActive: z.boolean().optional(),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    const before = await prisma.vehicleType.findUnique({ where: { id: req.params.id } })
+    if (!before) throw ApiError.notFound("Vehicle type not found.")
+    const vehicleType = await prisma.vehicleType.update({ where: { id: req.params.id }, data: req.body })
+    await writeAuditLog({ req, action: "vehicle_type.update", targetTable: "vehicle_types", targetId: vehicleType.id, before, after: req.body })
+    res.json({ vehicleType })
+  }),
+)
+
+adminConfigRouter.put(
+  "/cities/:cityId/vehicle-types/:vehicleTypeId",
+  validateBody(z.object({ isActive: z.boolean() })),
+  asyncHandler(async (req, res) => {
+    const link = await prisma.cityVehicleType.upsert({
+      where: { cityId_vehicleTypeId: { cityId: req.params.cityId, vehicleTypeId: req.params.vehicleTypeId } },
+      create: { cityId: req.params.cityId, vehicleTypeId: req.params.vehicleTypeId, isActive: req.body.isActive },
+      update: { isActive: req.body.isActive },
+    })
+    await writeAuditLog({ req, action: "city_vehicle_type.update", targetTable: "city_vehicle_types", targetId: `${link.cityId}:${link.vehicleTypeId}`, after: req.body })
+    res.json({ link })
   }),
 )
 

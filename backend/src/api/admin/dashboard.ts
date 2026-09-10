@@ -224,6 +224,69 @@ adminDashboardRouter.get(
   }),
 )
 
+/**
+ * Live operations summary (Phase 3 §21) — the single "what needs my
+ * attention right now" view: active rides, pending requests, online vs
+ * stale-location drivers, today's cancellations, and open safety/dispute
+ * items, all filterable by city/vehicle type/time window.
+ */
+adminDashboardRouter.get(
+  "/live-ops/summary",
+  asyncHandler(async (req, res) => {
+    const { cityId, vehicleTypeId, sinceHours = "24" } = req.query as Record<string, string>
+    const since = new Date(Date.now() - (Number(sinceHours) || 24) * 3_600_000)
+    const stalenessMinutes = await getSetting("matching.locationStalenessMinutes")
+    const staleCutoff = new Date(Date.now() - stalenessMinutes * 60_000)
+
+    const cityFilter = cityId ? { cityId } : {}
+    const vehicleTypeFilter = vehicleTypeId ? { vehicleTypeId } : {}
+    const rideRequestFilter = { ...cityFilter, ...vehicleTypeFilter }
+
+    const [
+      activeRides,
+      pendingRequests,
+      onlineDrivers,
+      staleDrivers,
+      cancellationsInWindow,
+      openSafetyIncidents,
+      openDisputes,
+      openSupportTickets,
+    ] = await Promise.all([
+      prisma.ride.count({
+        where: {
+          status: { notIn: ["ride_completed", "cancelled_by_passenger", "cancelled_by_driver", "expired", "disputed"] },
+          rideRequest: rideRequestFilter,
+        },
+      }),
+      prisma.rideRequest.count({ where: { status: { in: ["searching", "offers_open"] }, ...rideRequestFilter } }),
+      prisma.driverProfile.count({ where: { availabilityStatus: "online", ...cityFilter } }),
+      prisma.driverProfile.count({ where: { availabilityStatus: { in: ["online", "on_trip"] }, ...cityFilter, OR: [{ lastLocationAt: null }, { lastLocationAt: { lt: staleCutoff } }] } }),
+      prisma.ride.count({ where: { status: { in: ["cancelled_by_passenger", "cancelled_by_driver"] }, createdAt: { gte: since }, rideRequest: rideRequestFilter } }),
+      prisma.safetyEvent.count({ where: { resolvedAt: null, createdAt: { gte: since } } }),
+      prisma.dispute.count({ where: { status: { in: ["open", "under_review", "awaiting_info"] } } }),
+      prisma.supportTicket.count({ where: { status: { in: ["open", "in_progress", "waiting"] } } }),
+    ])
+
+    res.json({
+      windowHours: Number(sinceHours) || 24,
+      activeRides,
+      pendingRequests,
+      onlineDrivers,
+      staleLocationDrivers: staleDrivers,
+      cancellationsInWindow,
+      openSafetyIncidents,
+      openDisputes,
+      openSupportTickets,
+      quickActions: [
+        { label: "Review safety queue", endpoint: "GET /v1/admin/safety-events?resolved=false" },
+        { label: "Review open disputes", endpoint: "GET /v1/admin/disputes?status=open" },
+        { label: "Review support tickets", endpoint: "GET /v1/admin/support-tickets?status=open" },
+        { label: "View live map", endpoint: "GET /v1/admin/live-map" },
+      ],
+    })
+  }),
+)
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
