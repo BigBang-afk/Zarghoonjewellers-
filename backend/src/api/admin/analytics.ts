@@ -1,8 +1,25 @@
 import { Router } from "express"
 import { prisma } from "../../utils/prisma.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
+import { getSetting } from "../../config/settings.js"
 
 export const adminAnalyticsRouter = Router()
+
+/**
+ * Shared filter parsing for the executive/unit-economics dashboards
+ * (Phase 4 §35/§36) — date range (defaults to the last 30 days), city,
+ * vehicle type, and payment method, all optional. Every downstream query
+ * builds its own `where` off these so the two endpoints stay consistent
+ * with each other.
+ */
+function parseDashboardFilters(query: Record<string, unknown>) {
+  const to = query.to ? new Date(String(query.to)) : new Date()
+  const from = query.from ? new Date(String(query.from)) : new Date(to.getTime() - 30 * 86_400_000)
+  const cityId = (query.cityId as string) || undefined
+  const vehicleTypeId = (query.vehicleTypeId as string) || undefined
+  const paymentMethod = (query.paymentMethod as string) || undefined
+  return { from, to, cityId, vehicleTypeId, paymentMethod }
+}
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
@@ -251,5 +268,192 @@ adminAnalyticsRouter.get(
       }))
 
     res.json({ role, cohorts })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Executive dashboard (Phase 4 §35) — the one-screen view of platform
+// health, filterable by date range / city / vehicle type / payment
+// method. Every figure here is computed from real rows; nothing is
+// invented or hard-coded as a target.
+// ---------------------------------------------------------------------
+
+adminAnalyticsRouter.get(
+  "/analytics/executive",
+  asyncHandler(async (req, res) => {
+    const { from, to, cityId, vehicleTypeId, paymentMethod } = parseDashboardFilters(req.query as Record<string, unknown>)
+    const rideRequestFilter = { ...(cityId ? { cityId } : {}), ...(vehicleTypeId ? { vehicleTypeId } : {}) }
+    const rideWhere = {
+      createdAt: { gte: from, lte: to },
+      rideRequest: rideRequestFilter,
+      ...(paymentMethod ? { paymentMethod } : {}),
+    }
+    const completedWhere = { ...rideWhere, status: "ride_completed" }
+    const cancelledWhere = { ...rideWhere, status: { in: ["cancelled_by_passenger", "cancelled_by_driver"] } }
+
+    const [
+      completedRides,
+      cancelledRides,
+      fareAgg,
+      distinctPassengers,
+      distinctDrivers,
+      offerEtaAgg,
+      supportTicketsCount,
+      onlineDriverSessions,
+      rideRequestCount,
+      gbvAgg,
+      commissionAgg,
+      refundAgg,
+    ] = await Promise.all([
+      prisma.ride.count({ where: completedWhere }),
+      prisma.ride.count({ where: cancelledWhere }),
+      prisma.ride.aggregate({ where: completedWhere, _avg: { finalFare: true } }),
+      prisma.ride.findMany({ where: completedWhere, select: { passengerId: true }, distinct: ["passengerId"] }),
+      prisma.ride.findMany({ where: completedWhere, select: { driverId: true }, distinct: ["driverId"] }),
+      prisma.rideOffer.aggregate({
+        where: { createdAt: { gte: from, lte: to }, status: "accepted", rideRequest: rideRequestFilter },
+        _avg: { etaMin: true },
+      }),
+      prisma.supportTicket.count({ where: { createdAt: { gte: from, lte: to } } }),
+      prisma.driverOnlineSession.findMany({
+        where: { startedAt: { lte: to }, OR: [{ endedAt: null }, { endedAt: { gte: from } }] },
+        select: { driverId: true },
+        distinct: ["driverId"],
+      }),
+      prisma.rideRequest.count({ where: { createdAt: { gte: from, lte: to }, ...rideRequestFilter } }),
+      prisma.payment.aggregate({
+        where: { status: "captured", createdAt: { gte: from, lte: to }, ...(paymentMethod ? { method: paymentMethod } : {}), ride: rideWhere },
+        _sum: { amount: true },
+      }),
+      prisma.commission.aggregate({
+        where: { createdAt: { gte: from, lte: to }, payment: { ride: rideWhere } },
+        _sum: { amount: true },
+      }),
+      prisma.transaction.aggregate({
+        where: { type: "refund", createdAt: { gte: from, lte: to } },
+        _sum: { amount: true },
+      }),
+    ])
+
+    // Repeat rate — of the passengers active in this window, how many completed 2+ rides.
+    const passengerRideCounts = await prisma.ride.groupBy({
+      by: ["passengerId"],
+      where: completedWhere,
+      _count: true,
+    })
+    const repeatPassengers = passengerRideCounts.filter((p) => p._count >= 2).length
+
+    // Driver retention — of drivers active in the prior equal-length window,
+    // what share are also active in this one (the standard period-over-period definition).
+    const windowMs = to.getTime() - from.getTime()
+    const priorFrom = new Date(from.getTime() - windowMs)
+    const priorDrivers = await prisma.ride.findMany({
+      where: { ...rideWhere, createdAt: { gte: priorFrom, lt: from }, status: "ride_completed" },
+      select: { driverId: true },
+      distinct: ["driverId"],
+    })
+    const currentDriverIds = new Set(distinctDrivers.map((d) => d.driverId))
+    const retainedDrivers = priorDrivers.filter((d) => currentDriverIds.has(d.driverId)).length
+
+    const totalTerminal = completedRides + cancelledRides
+    const gbv = gbvAgg._sum.amount ?? 0
+    const commission = commissionAgg._sum.amount ?? 0
+
+    res.json({
+      filters: { from: from.toISOString(), to: to.toISOString(), cityId: cityId ?? null, vehicleTypeId: vehicleTypeId ?? null, paymentMethod: paymentMethod ?? null },
+      grossBookingValueRs: round2(gbv),
+      platformRevenueRs: round2(commission),
+      completedRides,
+      cancelledRides,
+      completionRatePct: totalTerminal ? round2((completedRides / totalTerminal) * 100) : 0,
+      cancellationRatePct: totalTerminal ? round2((cancelledRides / totalTerminal) * 100) : 0,
+      avgFareRs: round2(fareAgg._avg.finalFare ?? 0),
+      avgDriverEtaMin: round2(offerEtaAgg._avg.etaMin ?? 0),
+      activePassengers: distinctPassengers.length,
+      activeDrivers: distinctDrivers.length,
+      repeatRatePct: distinctPassengers.length ? round2((repeatPassengers / distinctPassengers.length) * 100) : 0,
+      driverRetentionPct: priorDrivers.length ? round2((retainedDrivers / priorDrivers.length) * 100) : null,
+      // Supply/demand indicator — distinct drivers who were online at any
+      // point in the window vs. ride requests placed in it; a ratio, not a
+      // literal "seconds of supply per request" figure.
+      supplyDemandRatio: rideRequestCount ? round2(onlineDriverSessions.length / rideRequestCount) : null,
+      supportTicketsCount,
+      refundsRs: round2(refundAgg._sum.amount ?? 0),
+    })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Unit economics (Phase 4 §36) — per-ride revenue/cost breakdown. Every
+// figure sourced from a real row (Commission, Transaction, Payment) is
+// labeled "actual"; the one figure with no real data anywhere in the
+// system (payment-processing fees — the mock providers charge nothing)
+// is computed from an admin-configured rate and explicitly labeled
+// "estimate", never presented as measured.
+// ---------------------------------------------------------------------
+
+adminAnalyticsRouter.get(
+  "/analytics/unit-economics",
+  asyncHandler(async (req, res) => {
+    const { from, to, cityId, vehicleTypeId, paymentMethod } = parseDashboardFilters(req.query as Record<string, unknown>)
+    const rideRequestFilter = { ...(cityId ? { cityId } : {}), ...(vehicleTypeId ? { vehicleTypeId } : {}) }
+    const rideWhere = {
+      createdAt: { gte: from, lte: to },
+      status: "ride_completed",
+      rideRequest: rideRequestFilter,
+      ...(paymentMethod ? { paymentMethod } : {}),
+    }
+
+    const [completedRides, gbvAgg, commissionAgg, discountAgg, payoutAgg, refundAgg, feePct] = await Promise.all([
+      prisma.ride.count({ where: rideWhere }),
+      prisma.payment.aggregate({ where: { status: "captured", ride: rideWhere }, _sum: { amount: true } }),
+      prisma.commission.aggregate({ where: { payment: { ride: rideWhere } }, _sum: { amount: true } }),
+      prisma.payment.aggregate({ where: { ride: rideWhere }, _sum: { discountAmount: true } }),
+      prisma.transaction.aggregate({
+        where: { type: "ride_payout", createdAt: { gte: from, lte: to }, payment: { ride: rideWhere } },
+        _sum: { amount: true },
+      }),
+      prisma.transaction.aggregate({ where: { type: "refund", createdAt: { gte: from, lte: to } }, _sum: { amount: true } }),
+      getSetting("finance.estimatedPaymentProcessingFeePct"),
+    ])
+
+    const gbv = gbvAgg._sum.amount ?? 0
+    const commission = commissionAgg._sum.amount ?? 0
+    const discounts = discountAgg._sum.discountAmount ?? 0
+    const payouts = Math.abs(payoutAgg._sum.amount ?? 0)
+    const refunds = Math.abs(refundAgg._sum.amount ?? 0)
+    const estimatedProcessingCost = round2(gbv * (feePct / 100))
+    const n = completedRides || 1
+
+    const revenuePerRideRs = round2(commission / n)
+    const driverPayoutPerRideRs = round2(payouts / n)
+    const paymentProcessingCostPerRideRs = round2(estimatedProcessingCost / n)
+    const promotionCostPerRideRs = round2(discounts / n)
+    const refundsPerRideRs = round2(refunds / n)
+    const contributionMarginPerRideRs = round2(
+      revenuePerRideRs - driverPayoutPerRideRs - paymentProcessingCostPerRideRs - promotionCostPerRideRs - refundsPerRideRs,
+    )
+
+    res.json({
+      filters: { from: from.toISOString(), to: to.toISOString(), cityId: cityId ?? null, vehicleTypeId: vehicleTypeId ?? null, paymentMethod: paymentMethod ?? null },
+      completedRides,
+      perRide: {
+        revenuePerRideRs: { value: revenuePerRideRs, basis: "actual" },
+        commissionPerRideRs: { value: revenuePerRideRs, basis: "actual" },
+        driverPayoutPerRideRs: { value: driverPayoutPerRideRs, basis: "actual" },
+        paymentProcessingCostPerRideRs: { value: paymentProcessingCostPerRideRs, basis: "estimate", note: `Based on an admin-configured ${feePct}% fee rate — no real provider fee data exists yet.` },
+        promotionCostPerRideRs: { value: promotionCostPerRideRs, basis: "actual" },
+        refundsPerRideRs: { value: refundsPerRideRs, basis: "actual" },
+        contributionMarginPerRideRs: { value: contributionMarginPerRideRs, basis: "estimate", note: "Includes the estimated payment-processing cost above." },
+      },
+      totals: {
+        grossBookingValueRs: round2(gbv),
+        platformRevenueRs: round2(commission),
+        driverPayoutsRs: round2(payouts),
+        promotionCostRs: round2(discounts),
+        refundsRs: round2(refunds),
+        estimatedPaymentProcessingCostRs: estimatedProcessingCost,
+      },
+    })
   }),
 )

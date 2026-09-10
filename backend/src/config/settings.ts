@@ -85,6 +85,13 @@ export interface PlatformSettingsShape {
   "pilotMode.maxDriverCount": number
   "pilotMode.maxPassengerCount": number
   "pilotMode.requireInvitationCode": boolean
+
+  // Phase 4 §36 — no real payment-provider fee data exists anywhere in
+  // this system (the mock providers charge nothing), so unit economics
+  // can only estimate processing cost from an admin-entered rate rather
+  // than pretend it's measured. Every place that uses this labels the
+  // resulting figure "estimate", never "actual".
+  "finance.estimatedPaymentProcessingFeePct": number
 }
 
 const DEFAULTS: PlatformSettingsShape = {
@@ -142,6 +149,8 @@ const DEFAULTS: PlatformSettingsShape = {
   "pilotMode.maxDriverCount": 0,
   "pilotMode.maxPassengerCount": 0,
   "pilotMode.requireInvitationCode": false,
+
+  "finance.estimatedPaymentProcessingFeePct": 2.9,
 }
 
 const CACHE_TTL_MS = 5_000
