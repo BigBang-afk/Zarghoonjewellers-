@@ -1,8 +1,13 @@
 import { Router } from "express"
+import { z } from "zod"
 import { prisma } from "../../utils/prisma.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
+import { validateBody } from "../../middleware/validate.js"
+import { requireAdminRole } from "../../middleware/auth.js"
 import { ApiError } from "../../utils/apiError.js"
 import { getPaymentProvider } from "../../services/payments/index.js"
+import { markPayoutProcessing, completePayout, failPayout } from "../../services/payoutService.js"
+import { writeAuditLog } from "../../shared/audit.js"
 
 export const adminFinanceRouter = Router()
 
@@ -47,6 +52,65 @@ adminFinanceRouter.get(
       prisma.commission.aggregate({ _sum: { amount: true } }),
     ])
     res.json({ commissions, total, page, pageSize: take, totalCommissionRs: sumAgg._sum.amount ?? 0 })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Driver payouts (Phase 4 §5) — admin can review activity and record a
+// processing/completed/failed outcome, but only ever COMPLETED once the
+// admin is attesting to (or the payment-provider webhook confirms) an
+// actual transfer — never claimed automatically.
+// ---------------------------------------------------------------------
+
+adminFinanceRouter.get(
+  "/payouts",
+  asyncHandler(async (req, res) => {
+    const { status } = req.query as Record<string, string>
+    const { take, skip, page } = pagination(req.query as Record<string, unknown>)
+    const where = status ? { status } : {}
+    const [payouts, total] = await Promise.all([
+      prisma.payoutRequest.findMany({
+        where,
+        include: { driver: { include: { user: { select: { fullName: true, phone: true } } } } },
+        orderBy: { createdAt: "desc" },
+        take,
+        skip,
+      }),
+      prisma.payoutRequest.count({ where }),
+    ])
+    res.json({ payouts, total, page, pageSize: take })
+  }),
+)
+
+adminFinanceRouter.post(
+  "/payouts/:id/processing",
+  requireAdminRole("super_admin", "finance"),
+  asyncHandler(async (req, res) => {
+    const payout = await markPayoutProcessing(req.params.id)
+    await writeAuditLog({ req, action: "payout.processing", targetTable: "payout_requests", targetId: payout.id })
+    res.json({ payout })
+  }),
+)
+
+adminFinanceRouter.post(
+  "/payouts/:id/complete",
+  requireAdminRole("super_admin", "finance"),
+  validateBody(z.object({ reference: z.string().trim().min(1).max(200) })),
+  asyncHandler(async (req, res) => {
+    const payout = await completePayout(req.params.id, req.body.reference)
+    await writeAuditLog({ req, action: "payout.complete", targetTable: "payout_requests", targetId: payout.id, after: req.body })
+    res.json({ payout })
+  }),
+)
+
+adminFinanceRouter.post(
+  "/payouts/:id/fail",
+  requireAdminRole("super_admin", "finance"),
+  validateBody(z.object({ notes: z.string().trim().max(500).optional() })),
+  asyncHandler(async (req, res) => {
+    const payout = await failPayout(req.params.id, req.body.notes)
+    await writeAuditLog({ req, action: "payout.fail", targetTable: "payout_requests", targetId: payout.id, after: req.body })
+    res.json({ payout })
   }),
 )
 

@@ -5,6 +5,7 @@ import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
 import { ApiError } from "../../utils/apiError.js"
 import { getPaymentProvider } from "../../services/payments/index.js"
+import { completePayout, failPayout } from "../../services/payoutService.js"
 import { emitToAdmin } from "../../realtime/socket.js"
 
 /**
@@ -105,34 +106,14 @@ async function processWebhookEvent(body: z.infer<typeof webhookBodySchema>): Pro
     case "payout.completed": {
       // Only ever mark a payout COMPLETED here, from the provider's own
       // confirmation — never claim the transfer happened any earlier
-      // (Phase 4 §5). Moves the held amount from pending to the
-      // lifetime-paid total; never touches `balance` (already debited
-      // when the payout was requested).
-      const payout = await prisma.payoutRequest.findFirst({ where: { reference: body.providerReference, status: { in: ["requested", "processing"] } }, include: { driver: true } })
-      if (!payout) return
-      const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: payout.driver.userId } })
-      await prisma.$transaction([
-        prisma.payoutRequest.update({ where: { id: payout.id }, data: { status: "completed", processedAt: new Date() } }),
-        prisma.wallet.update({
-          where: { id: wallet.id },
-          data: { pendingBalance: Math.max(0, wallet.pendingBalance - payout.amount), paidBalance: wallet.paidBalance + payout.amount },
-        }),
-      ])
+      // (Phase 4 §5).
+      const payout = await prisma.payoutRequest.findFirst({ where: { reference: body.providerReference, status: { in: ["requested", "processing"] } } })
+      if (payout) await completePayout(payout.id, body.providerReference)
       return
     }
     case "payout.failed": {
-      // Funds return to the available balance — a failed transfer must
-      // never silently vanish from the driver's wallet.
-      const payout = await prisma.payoutRequest.findFirst({ where: { reference: body.providerReference, status: { in: ["requested", "processing"] } }, include: { driver: true } })
-      if (!payout) return
-      const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: payout.driver.userId } })
-      await prisma.$transaction([
-        prisma.payoutRequest.update({ where: { id: payout.id }, data: { status: "failed", processedAt: new Date() } }),
-        prisma.wallet.update({
-          where: { id: wallet.id },
-          data: { pendingBalance: Math.max(0, wallet.pendingBalance - payout.amount), balance: wallet.balance + payout.amount },
-        }),
-      ])
+      const payout = await prisma.payoutRequest.findFirst({ where: { reference: body.providerReference, status: { in: ["requested", "processing"] } } })
+      if (payout) await failPayout(payout.id, "Payment provider reported failure.")
       return
     }
   }

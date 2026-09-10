@@ -10,7 +10,8 @@ import { emitToAdmin } from "../../realtime/socket.js"
 import { checkImpossibleMovement } from "../../services/riskService.js"
 import { getDriverIncentiveSummary } from "../../services/incentiveService.js"
 import { submitDriverDocument } from "../../services/verificationService.js"
-import { DocType } from "../../types/enums.js"
+import { requestPayout, cancelPayout } from "../../services/payoutService.js"
+import { DocType, PaymentMethod } from "../../types/enums.js"
 
 export const driverRouter = Router()
 driverRouter.use(requireAuth, requireRole("driver"))
@@ -207,6 +208,8 @@ driverRouter.get(
 
     res.json({
       walletBalanceRs: wallet?.balance ?? 0,
+      pendingBalanceRs: wallet?.pendingBalance ?? 0,
+      paidBalanceRs: wallet?.paidBalance ?? 0,
       today,
       week,
       month,
@@ -292,6 +295,38 @@ driverRouter.get(
     const driver = await getDriverProfileOrThrow(req.auth!.userId)
     const documents = await prisma.driverDocument.findMany({ where: { driverId: driver.id }, orderBy: { createdAt: "desc" } })
     res.json({ documents })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Payouts (Phase 4 §5)
+// ---------------------------------------------------------------------
+
+driverRouter.get(
+  "/me/payouts",
+  asyncHandler(async (req, res) => {
+    const driver = await getDriverProfileOrThrow(req.auth!.userId)
+    const payouts = await prisma.payoutRequest.findMany({ where: { driverId: driver.id }, orderBy: { createdAt: "desc" }, take: 50 })
+    res.json({ payouts })
+  }),
+)
+
+driverRouter.post(
+  "/me/payouts",
+  validateBody(z.object({ amount: z.number().positive(), method: z.enum(PaymentMethod) })),
+  asyncHandler(async (req, res) => {
+    const driver = await getDriverProfileOrThrow(req.auth!.userId)
+    const payout = await requestPayout(req.auth!.userId, driver.id, req.body.amount, req.body.method)
+    res.status(201).json({ payout })
+  }),
+)
+
+driverRouter.post(
+  "/me/payouts/:id/cancel",
+  asyncHandler(async (req, res) => {
+    const driver = await getDriverProfileOrThrow(req.auth!.userId)
+    const payout = await cancelPayout(req.params.id, driver.id)
+    res.json({ payout })
   }),
 )
 
