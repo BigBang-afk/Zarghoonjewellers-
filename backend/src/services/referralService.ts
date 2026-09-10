@@ -3,6 +3,7 @@ import { prisma } from "../utils/prisma.js"
 import { ApiError } from "../utils/apiError.js"
 import { getSetting } from "../config/settings.js"
 import { notify } from "./notifications/NotificationService.js"
+import { recordRiskEvent } from "./riskService.js"
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
@@ -46,6 +47,7 @@ export async function applyReferralCode(referredUserId: string, code: string): P
   // Same phone/email would mean the same person re-registering — block it
   // as a duplicate-account referral rather than rewarding it.
   if (referrer.phone === referred.phone || (referrer.email && referrer.email === referred.email)) {
+    await recordRiskEvent(referredUserId, "shared_identifier", "medium", { referrerUserId: referrer.id, matchedOn: referrer.phone === referred.phone ? "phone" : "email" })
     throw ApiError.badRequest("SELF_REFERRAL", "You can't refer yourself.")
   }
 

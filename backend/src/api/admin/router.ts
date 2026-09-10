@@ -8,6 +8,7 @@ import { adminTrustRouter } from "./trust.js"
 import { adminConfigRouter } from "./config.js"
 import { adminSystemRouter } from "./system.js"
 import { adminBusinessRouter } from "./business.js"
+import { adminRiskRouter } from "./risk.js"
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireRole("admin"))
@@ -20,3 +21,4 @@ adminRouter.use(adminTrustRouter)
 adminRouter.use(adminConfigRouter)
 adminRouter.use(adminSystemRouter)
 adminRouter.use(adminBusinessRouter)
+adminRouter.use(adminRiskRouter)

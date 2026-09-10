@@ -1,5 +1,6 @@
 import { prisma } from "../utils/prisma.js"
 import { ApiError } from "../utils/apiError.js"
+import { recordRiskEvent } from "./riskService.js"
 
 export interface PromoValidationResult {
   promotionId: string
@@ -46,7 +47,10 @@ export async function validatePromoCode(params: {
   const alreadyRedeemed = await prisma.promoRedemption.findUnique({
     where: { promotionId_userId: { promotionId: promo.id, userId: params.userId } },
   })
-  if (alreadyRedeemed) throw ApiError.conflict("PROMO_ALREADY_USED", "You've already used this promo code.")
+  if (alreadyRedeemed) {
+    await recordRiskEvent(params.userId, "promo_abuse", "low", { promoCode: params.code, promotionId: promo.id })
+    throw ApiError.conflict("PROMO_ALREADY_USED", "You've already used this promo code.")
+  }
 
   let discountAmount =
     promo.discountType === "percentage" ? params.fareAmount * (promo.discountValue / 100) : promo.discountValue

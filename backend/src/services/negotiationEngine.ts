@@ -6,6 +6,7 @@ import { dispatchQuickMatchNext, expireRequest } from "./rideRequestService.js"
 import { selectOffer } from "./bookingService.js"
 import { notify } from "./notifications/NotificationService.js"
 import { emitToUser } from "../realtime/socket.js"
+import { recordRiskEvent } from "./riskService.js"
 
 async function loadOfferOrThrow(offerId: string) {
   const offer = await prisma.rideOffer.findUnique({
@@ -71,6 +72,11 @@ export async function driverCounterOffer(offerId: string, driverProfileId: strin
   const maxDeviationPct = await getSetting("negotiation.maxCounterDeviationPct")
   const maxDeviation = offer.offerPrice * maxDeviationPct
   if (Math.abs(counterPrice - offer.offerPrice) > maxDeviation) {
+    await recordRiskEvent(offer.driver.userId, "abnormal_offer_behavior", "low", {
+      offerPrice: offer.offerPrice,
+      attemptedCounterPrice: counterPrice,
+      maxDeviationPct,
+    })
     throw ApiError.badRequest(
       "COUNTER_DEVIATION_TOO_LARGE",
       `Counter-offers must be within ${Math.round(maxDeviationPct * 100)}% of the requested fare (Rs ${offer.offerPrice}).`,
