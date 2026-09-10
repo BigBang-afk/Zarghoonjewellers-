@@ -16,13 +16,26 @@ import { publicRouter } from "./api/public/router.js"
 import { accountRouter } from "./api/account/router.js"
 import { businessRouter } from "./api/business/router.js"
 import { supportRouter } from "./api/support/router.js"
+import { webhooksRouter } from "./api/public/webhooks.js"
 
 export function createApp() {
   const app = express()
 
   app.use(helmet())
   app.use(cors({ origin: env.corsOrigin, credentials: true }))
-  app.use(express.json({ limit: "1mb" }))
+  // `verify` stashes the exact raw bytes on req.rawBody for every request
+  // (cheap — just a buffer reference) so the payment-webhook route can
+  // verify a provider's signature against the real wire bytes rather than
+  // a re-serialized JSON.stringify(req.body), which a stray key-order or
+  // whitespace difference would silently break (Phase 4 §4).
+  app.use(
+    express.json({
+      limit: "1mb",
+      verify: (req, _res, buf) => {
+        ;(req as express.Request & { rawBody?: Buffer }).rawBody = buf
+      },
+    }),
+  )
   app.use(generalRateLimit)
   app.use(sanitizeResponse)
 
@@ -40,6 +53,7 @@ export function createApp() {
   app.use("/v1/safety", safetyRouter)
   app.use("/v1/public", publicSafetyRouter)
   app.use("/v1/public", publicRouter)
+  app.use("/v1/public/webhooks", webhooksRouter)
   app.use("/v1/notifications", notificationsRouter)
   app.use("/v1/account", accountRouter)
   app.use("/v1/business", businessRouter)

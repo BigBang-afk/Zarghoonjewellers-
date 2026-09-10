@@ -30,6 +30,11 @@ export const env = {
   mockOtp: bool("MOCK_OTP", true),
   mockPayments: bool("MOCK_PAYMENTS", true),
   mockNotifications: bool("MOCK_NOTIFICATIONS", true),
+
+  // Payment webhooks (Phase 4 §4) — a dev-only shared-secret HMAC scheme
+  // for the mock card provider's verifyWebhookSignature. A real provider
+  // (Stripe etc.) has its own signature scheme and its own secret.
+  paymentsWebhookSecret: process.env.PAYMENTS_PROVIDER_WEBHOOK_SECRET ?? "dev-webhook-secret-change-me",
 }
 
 if (env.isProduction) {
