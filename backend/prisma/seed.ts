@@ -100,7 +100,7 @@ async function wipe() {
     "auditLog", "adminUser",
     "review", "rating", "message", "notification",
     "transaction", "commission", "payment",
-    "rideStatusHistory", "rideLocation", "safetyEvent", "dispute", "supportTicket", "ride",
+    "rideStatusHistory", "rideLocation", "safetyEvent", "dispute", "supportMessage", "supportTicket", "ride",
     "counterOffer", "rideOffer", "rideRequest",
     "promoRedemption", "favoriteDriver",
     "driverIncentiveProgress", "incentiveReward",

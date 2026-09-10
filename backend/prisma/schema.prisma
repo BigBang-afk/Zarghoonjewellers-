@@ -181,6 +181,7 @@ model User {
   sentMessages      Message[]
   supportTickets    SupportTicket[] @relation("TicketAuthor")
   assignedTickets   SupportTicket[] @relation("TicketAssignee")
+  supportMessages   SupportMessage[]
   safetyEvents      SafetyEvent[]
   wallet            Wallet?
   refreshTokens     RefreshToken[]
@@ -862,9 +863,27 @@ model SupportTicket {
   user                User     @relation("TicketAuthor", fields: [userId], references: [id])
   ride                Ride?    @relation(fields: [rideId], references: [id])
   assignedAdmin       User?    @relation("TicketAssignee", fields: [assignedAdminId], references: [id])
+  messages            SupportMessage[]
 
   @@index([status, priority])
   @@map("support_tickets")
+}
+
+/// The visible back-and-forth on a ticket (Phase 4 §20's "reply") —
+/// distinct from SupportTicket.internalNotes, which neither party sees.
+model SupportMessage {
+  id           String   @id @default(uuid())
+  ticketId     String
+  authorUserId String
+  isAdmin      Boolean  @default(false)
+  body         String
+  createdAt    DateTime @default(now())
+
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id])
+  author       User          @relation(fields: [authorUserId], references: [id])
+
+  @@index([ticketId, createdAt])
+  @@map("support_messages")
 }
 
 /// status: open | under_review | awaiting_info | resolved | rejected | closed

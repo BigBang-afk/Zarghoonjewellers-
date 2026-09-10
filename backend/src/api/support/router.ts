@@ -16,6 +16,16 @@ import { SupportCategory } from "../../types/enums.js"
 export const supportRouter = Router()
 supportRouter.use(requireAuth)
 
+// Ticket rows returned to the author never include `internalNotes` —
+// that field exists specifically so admins can leave notes the reporting
+// user never sees (Phase 4 §20).
+const ticketAuthorSelect = {
+  id: true, userId: true, rideId: true, category: true, subject: true, description: true,
+  status: true, priority: true, assignedAdminId: true, attachments: true, dueAt: true,
+  resolvedAt: true, createdAt: true, updatedAt: true,
+  assignedAdmin: { select: { fullName: true } },
+} as const
+
 supportRouter.post(
   "/tickets",
   validateBody(
@@ -24,6 +34,7 @@ supportRouter.post(
       subject: z.string().trim().min(3).max(150),
       description: z.string().trim().max(2000).optional(),
       rideId: z.string().uuid().optional(),
+      attachments: z.array(z.string().trim().min(1).max(500)).max(10).optional(),
     }),
   ),
   asyncHandler(async (req, res) => {
@@ -34,9 +45,11 @@ supportRouter.post(
       if (!isParty) throw ApiError.forbidden()
     }
 
+    const { attachments, ...rest } = req.body
     const priority = req.body.category === "safety" ? "high" : "medium"
     const ticket = await prisma.supportTicket.create({
-      data: { userId: req.auth!.userId, ...req.body, priority },
+      data: { userId: req.auth!.userId, ...rest, priority, attachments: attachments ? JSON.stringify(attachments) : undefined },
+      select: ticketAuthorSelect,
     })
     emitToAdmin("support.ticket_created", { ticketId: ticket.id, category: ticket.category, priority: ticket.priority })
     res.status(201).json({ ticket })
@@ -48,7 +61,7 @@ supportRouter.get(
   asyncHandler(async (req, res) => {
     const tickets = await prisma.supportTicket.findMany({
       where: { userId: req.auth!.userId },
-      include: { assignedAdmin: { select: { fullName: true } } },
+      select: ticketAuthorSelect,
       orderBy: { createdAt: "desc" },
     })
     res.json({ tickets })
@@ -58,8 +71,30 @@ supportRouter.get(
 supportRouter.get(
   "/tickets/:id",
   asyncHandler(async (req, res) => {
-    const ticket = await prisma.supportTicket.findUnique({ where: { id: req.params.id }, include: { assignedAdmin: { select: { fullName: true } }, ride: true } })
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { id: req.params.id },
+      select: { ...ticketAuthorSelect, ride: true, messages: { orderBy: { createdAt: "asc" }, include: { author: { select: { fullName: true } } } } },
+    })
     if (!ticket || ticket.userId !== req.auth!.userId) throw ApiError.notFound("Ticket not found.")
     res.json({ ticket })
+  }),
+)
+
+supportRouter.post(
+  "/tickets/:id/messages",
+  validateBody(z.object({ body: z.string().trim().min(1).max(2000) })),
+  asyncHandler(async (req, res) => {
+    const ticket = await prisma.supportTicket.findUnique({ where: { id: req.params.id } })
+    if (!ticket || ticket.userId !== req.auth!.userId) throw ApiError.notFound("Ticket not found.")
+    if (ticket.status === "closed") throw ApiError.badRequest("TICKET_CLOSED", "This ticket is closed. Open a new one if you need further help.")
+
+    const message = await prisma.supportMessage.create({
+      data: { ticketId: ticket.id, authorUserId: req.auth!.userId, isAdmin: false, body: req.body.body },
+    })
+    if (ticket.status === "resolved") {
+      await prisma.supportTicket.update({ where: { id: ticket.id }, data: { status: "waiting" } })
+    }
+    emitToAdmin("support.ticket_message", { ticketId: ticket.id })
+    res.status(201).json({ message })
   }),
 )
