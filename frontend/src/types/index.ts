@@ -236,6 +236,18 @@ export interface DriverAcquisitionCampaign {
   vehicleType?: { name: string } | null
 }
 
+export type DocType = "national_id" | "driving_license" | "vehicle_registration" | "insurance" | "route_permit" | "profile_photo"
+
+export interface DriverDocument {
+  id: string
+  docType: DocType
+  fileUrl: string
+  status: "pending" | "approved" | "rejected" | "expired"
+  rejectionReason: string | null
+  expiresAt: string | null
+  createdAt: string
+}
+
 export interface DriverFunnelStage {
   stage: "applications" | "verification_pending" | "approved" | "online" | "first_ride" | "active"
   count: number

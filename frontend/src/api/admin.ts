@@ -17,6 +17,8 @@ export const adminApi = {
   verificationQueue: () => api.get<{ drivers: unknown[] }>("/admin/drivers/verification-queue"),
   verifyDriver: (driverId: string, decision: "approve" | "reject", reason?: string) =>
     api.post<{ driverProfile: unknown }>(`/admin/drivers/${driverId}/verify`, { decision, reason }),
+  reviewDriverDocument: (documentId: string, decision: "approve" | "reject", reason?: string) =>
+    api.post<{ document: unknown }>(`/admin/driver-documents/${documentId}/review`, { decision, reason }),
   auditLogs: (query?: { page?: number; pageSize?: number }) => api.get<{ logs: unknown[]; total: number }>("/admin/audit-logs", query),
   settings: () => api.get<{ settings: Record<string, unknown>; defaults: Record<string, unknown> }>("/admin/settings"),
   liveOpsSummary: (cityId?: string) =>

@@ -60,7 +60,7 @@ adminDashboardRouter.get(
       prisma.commission.aggregate({ _sum: { amount: true }, where: { payment: { status: "captured", ...paymentCityFilter } } }),
       prisma.transaction.aggregate({ _sum: { amount: true }, where: { type: "ride_payout", ...transactionCityFilter } }),
       prisma.ride.aggregate({ _avg: { finalFare: true, durationMin: true }, where: { status: "ride_completed", ...rideCityFilter } }),
-      prisma.driverProfile.count({ where: { verificationStatus: "pending", ...cityFilter } }),
+      prisma.driverProfile.count({ where: { verificationStatus: { in: ["pending", "under_review"] }, ...cityFilter } }),
       cityId ? prisma.city.findUnique({ where: { id: cityId }, select: { currencyCode: true } }) : Promise.resolve(null),
     ])
 

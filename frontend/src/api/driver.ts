@@ -1,8 +1,11 @@
 import { api } from "./client"
-import type { DriverEarningsSummary, DriverIncentiveSummary, IncomingRequestSummary, PayoutRequest, RideSummary } from "../types"
+import type { DriverDocument, DriverEarningsSummary, DriverIncentiveSummary, IncomingRequestSummary, PayoutRequest, RideSummary } from "../types"
 
 export const driverApi = {
   me: () => api.get<{ driverProfile: Record<string, unknown> }>("/driver/me"),
+  documents: () => api.get<{ documents: DriverDocument[] }>("/driver/me/documents"),
+  submitDocument: (docType: string, fileUrl: string, expiresAt?: string) =>
+    api.post<{ document: DriverDocument }>("/driver/me/documents", { docType, fileUrl, expiresAt }),
   setAvailability: (status: "online" | "offline") => api.patch<{ driverProfile: Record<string, unknown> }>("/driver/me/availability", { status }),
   updateLocation: (lat: number, lng: number, accuracyMeters?: number) => api.patch<void>("/driver/me/location", { lat, lng, accuracyMeters }),
   payouts: () => api.get<{ payouts: PayoutRequest[] }>("/driver/me/payouts"),

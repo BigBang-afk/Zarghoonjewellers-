@@ -34,7 +34,7 @@ export async function computeDriverFunnel(filter: { campaignCode?: string; cityI
 
   const [applications, verificationPending, approved, online, firstRide, active] = await Promise.all([
     prisma.driverProfile.count({ where: profileWhere }),
-    prisma.driverProfile.count({ where: { ...profileWhere, verificationStatus: "pending" } }),
+    prisma.driverProfile.count({ where: { ...profileWhere, verificationStatus: { in: ["pending", "under_review"] } } }),
     prisma.driverProfile.count({ where: { ...profileWhere, verificationStatus: "approved" } }),
     prisma.driverProfile.count({ where: { ...profileWhere, verificationStatus: "approved", availabilityStatus: { in: ["online", "on_trip"] } } }),
     prisma.driverProfile.count({ where: { ...profileWhere, completedRides: { gt: 0 } } }),

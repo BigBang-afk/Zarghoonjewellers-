@@ -16,7 +16,11 @@ adminVerificationRouter.get(
   "/drivers/verification-queue",
   asyncHandler(async (_req, res) => {
     const drivers = await prisma.driverProfile.findMany({
-      where: { verificationStatus: "pending" },
+      // "pending" = signed up, nothing submitted yet; "under_review" = at
+      // least one document submitted (see verificationService.submitDriverDocument).
+      // Both belong in the queue — a driver who actually uploaded documents
+      // must not disappear from it.
+      where: { verificationStatus: { in: ["pending", "under_review"] } },
       include: { user: true, vehicles: { include: { vehicleType: true, documents: true } }, documents: true, city: true },
       orderBy: { createdAt: "asc" },
     })

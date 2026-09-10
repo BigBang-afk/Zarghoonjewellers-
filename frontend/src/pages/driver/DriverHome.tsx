@@ -17,6 +17,7 @@ import type { DriverEarningsSummary, IncomingRequestSummary } from "../../types"
 import { ActiveRidePanel } from "./ActiveRidePanel"
 import { DriverRatingPanel } from "./DriverRatingPanel"
 import { EarningsPanel } from "./EarningsPanel"
+import { OnboardingPanel } from "./OnboardingPanel"
 
 export function DriverHome() {
   const { user } = useAuth()
@@ -242,6 +243,8 @@ export function DriverHome() {
           />
         ) : tab === "earnings" ? (
           <EarningsPanel />
+        ) : verificationStatus !== "approved" ? (
+          <OnboardingPanel verificationStatus={verificationStatus} />
         ) : (
           <>
             <MapCanvas className="relative flex-1">
@@ -262,29 +265,20 @@ export function DriverHome() {
                 </button>
               </div>
 
-              {verificationStatus !== "approved" ? (
-                <div className="absolute inset-x-4 top-20 rounded-2xl bg-white/95 p-4 text-center shadow-rivo-md">
-                  <Badge tone="warning">Verification pending</Badge>
-                  <p className="mt-2 text-sm text-ink-700">Your documents are under review. You'll be able to go online once an admin approves them.</p>
-                </div>
-              ) : (
-                <>
-                  <Pin x={50} y={55} variant="you" />
-                  <CarMarker x={30} y={30} rotate={10} />
-                  <CarMarker x={72} y={38} rotate={-20} />
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
-                    <button
-                      onClick={toggleOnline}
-                      disabled={busy}
-                      className={`flex items-center gap-2.5 rounded-full px-5 py-3 shadow-rivo-lg transition-colors ${online ? "bg-success-500 text-white" : "bg-ink-900 text-white"}`}
-                    >
-                      <Power className="h-4 w-4" />
-                      <span className="text-sm font-bold">{online ? "You're online" : "You're offline"}</span>
-                      <span className={`ml-1 h-2 w-2 rounded-full ${online ? "bg-white animate-pulse" : "bg-white/40"}`} />
-                    </button>
-                  </div>
-                </>
-              )}
+              <Pin x={50} y={55} variant="you" />
+              <CarMarker x={30} y={30} rotate={10} />
+              <CarMarker x={72} y={38} rotate={-20} />
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
+                <button
+                  onClick={toggleOnline}
+                  disabled={busy}
+                  className={`flex items-center gap-2.5 rounded-full px-5 py-3 shadow-rivo-lg transition-colors ${online ? "bg-success-500 text-white" : "bg-ink-900 text-white"}`}
+                >
+                  <Power className="h-4 w-4" />
+                  <span className="text-sm font-bold">{online ? "You're online" : "You're offline"}</span>
+                  <span className={`ml-1 h-2 w-2 rounded-full ${online ? "bg-white animate-pulse" : "bg-white/40"}`} />
+                </button>
+              </div>
             </MapCanvas>
 
             <div className="grid grid-cols-4 gap-2 border-t border-ink-900/[0.06] bg-white px-4 py-3">
