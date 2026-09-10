@@ -21,20 +21,23 @@ export async function requestPayout(driverUserId: string, driverId: string, amou
   if (amount <= 0) throw ApiError.badRequest("INVALID_AMOUNT", "Payout amount must be positive.")
 
   const wallet = await prisma.wallet.findUnique({ where: { userId: driverUserId } })
-  if (!wallet || wallet.balance < amount) {
-    throw ApiError.badRequest("INSUFFICIENT_BALANCE", "Your available balance is lower than the requested payout amount.")
-  }
-
+  if (!wallet) throw ApiError.badRequest("INSUFFICIENT_BALANCE", "Your available balance is lower than the requested payout amount.")
   const rounded = roundMoney(amount, wallet.currencyCode)
-  const [, payout] = await prisma.$transaction([
-    prisma.wallet.update({
-      where: { id: wallet.id },
-      data: { balance: roundMoney(wallet.balance - rounded, wallet.currencyCode), pendingBalance: roundMoney(wallet.pendingBalance + rounded, wallet.currencyCode) },
-    }),
-    prisma.payoutRequest.create({ data: { driverId, amount: rounded, method, status: "requested" } }),
-  ])
 
-  return payout
+  return prisma.$transaction(async (tx) => {
+    // Conditional on the balance still being sufficient at write time (not
+    // the value read a moment ago) — closes the race where two concurrent
+    // requests both read the same balance, both pass a check-then-act
+    // comparison, and both succeed, over-withdrawing the wallet.
+    const claimed = await tx.wallet.updateMany({
+      where: { id: wallet.id, balance: { gte: rounded } },
+      data: { balance: { decrement: rounded }, pendingBalance: { increment: rounded } },
+    })
+    if (claimed.count === 0) {
+      throw ApiError.badRequest("INSUFFICIENT_BALANCE", "Your available balance is lower than the requested payout amount.")
+    }
+    return tx.payoutRequest.create({ data: { driverId, amount: rounded, method, status: "requested" } })
+  })
 }
 
 export async function cancelPayout(payoutId: string, driverId: string) {
@@ -66,17 +69,31 @@ export async function completePayout(payoutId: string, reference?: string) {
   if (!(OPEN_STATUSES as readonly string[]).includes(payout.status)) return payout // already terminal — idempotent no-op
 
   const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: payout.driver.userId } })
-  const [, updated] = await prisma.$transaction([
-    prisma.wallet.update({
+
+  const claimedHere = await prisma.$transaction(async (tx) => {
+    // Conditional claim — a webhook confirmation and an admin action could
+    // both reach here for the same payout at nearly the same moment;
+    // only the write that actually flips a still-open status credits the
+    // wallet, so paidBalance is never double-credited.
+    const claimed = await tx.payoutRequest.updateMany({
+      where: { id: payoutId, status: { in: [...OPEN_STATUSES] } },
+      data: { status: "completed", processedAt: new Date(), reference: reference ?? payout.reference },
+    })
+    if (claimed.count === 0) return false
+    await tx.wallet.update({
       where: { id: wallet.id },
       data: {
         pendingBalance: Math.max(0, roundMoney(wallet.pendingBalance - payout.amount, wallet.currencyCode)),
         paidBalance: roundMoney(wallet.paidBalance + payout.amount, wallet.currencyCode),
       },
-    }),
-    prisma.payoutRequest.update({ where: { id: payoutId }, data: { status: "completed", processedAt: new Date(), reference: reference ?? payout.reference } }),
-  ])
-  await notify({ userId: payout.driver.userId, type: "payment", title: "Payout completed", body: `Rs ${payout.amount} was sent to your ${payout.method} account.`, data: { payoutId } })
+    })
+    return true
+  })
+
+  const updated = await prisma.payoutRequest.findUniqueOrThrow({ where: { id: payoutId } })
+  if (claimedHere) {
+    await notify({ userId: payout.driver.userId, type: "payment", title: "Payout completed", body: `Rs ${payout.amount} was sent to your ${payout.method} account.`, data: { payoutId } })
+  }
   return updated
 }
 
@@ -96,15 +113,21 @@ async function returnFundsAndClose(
   notes?: string,
 ) {
   const wallet = await prisma.wallet.findUniqueOrThrow({ where: { userId: payout.driver.userId } })
-  const [, updated] = await prisma.$transaction([
-    prisma.wallet.update({
+  await prisma.$transaction(async (tx) => {
+    // Same conditional-claim guard as completePayout — only the caller
+    // that actually flips a still-open status returns funds to balance.
+    const claimed = await tx.payoutRequest.updateMany({
+      where: { id: payout.id, status: { in: [...OPEN_STATUSES] } },
+      data: { status, processedAt: new Date(), notes },
+    })
+    if (claimed.count === 0) return
+    await tx.wallet.update({
       where: { id: wallet.id },
       data: {
         pendingBalance: Math.max(0, roundMoney(wallet.pendingBalance - payout.amount, wallet.currencyCode)),
         balance: roundMoney(wallet.balance + payout.amount, wallet.currencyCode),
       },
-    }),
-    prisma.payoutRequest.update({ where: { id: payout.id }, data: { status, processedAt: new Date(), notes } }),
-  ])
-  return updated
+    })
+  })
+  return prisma.payoutRequest.findUniqueOrThrow({ where: { id: payout.id } })
 }

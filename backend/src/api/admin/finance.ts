@@ -19,6 +19,7 @@ function pagination(query: Record<string, unknown>) {
 
 adminFinanceRouter.get(
   "/payments",
+  requireAdminRole("super_admin", "finance", "ops_manager"),
   asyncHandler(async (req, res) => {
     const { status } = req.query as Record<string, string>
     const { take, skip, page } = pagination(req.query as Record<string, unknown>)
@@ -39,6 +40,7 @@ adminFinanceRouter.get(
 
 adminFinanceRouter.get(
   "/commissions",
+  requireAdminRole("super_admin", "finance", "ops_manager"),
   asyncHandler(async (req, res) => {
     const { take, skip, page } = pagination(req.query as Record<string, unknown>)
     const [commissions, total, sumAgg] = await Promise.all([
@@ -64,6 +66,7 @@ adminFinanceRouter.get(
 
 adminFinanceRouter.get(
   "/payouts",
+  requireAdminRole("super_admin", "finance", "ops_manager"),
   asyncHandler(async (req, res) => {
     const { status } = req.query as Record<string, string>
     const { take, skip, page } = pagination(req.query as Record<string, unknown>)
@@ -117,6 +120,7 @@ adminFinanceRouter.post(
 /** Reconciliation visibility (Phase 4 §4/§28) — every inbound webhook, whatever happened to it. */
 adminFinanceRouter.get(
   "/webhooks",
+  requireAdminRole("super_admin", "finance", "ops_manager"),
   asyncHandler(async (req, res) => {
     const { status, provider } = req.query as Record<string, string>
     const { take, skip, page } = pagination(req.query as Record<string, unknown>)
@@ -132,6 +136,7 @@ adminFinanceRouter.get(
 /** Ask the provider directly for a transaction's current state — for support/reconciliation, not the app's own record. */
 adminFinanceRouter.get(
   "/payments/:providerReference/provider-status",
+  requireAdminRole("super_admin", "finance", "ops_manager"),
   asyncHandler(async (req, res) => {
     const payment = await prisma.payment.findFirst({ where: { providerReference: req.params.providerReference } })
     if (!payment) throw ApiError.notFound("No payment found with that provider reference.")

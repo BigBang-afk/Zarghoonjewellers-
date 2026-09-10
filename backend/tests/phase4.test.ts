@@ -226,6 +226,24 @@ describe("Driver payouts", () => {
     expect(res.status).toBe(400)
     expect(res.body.error.code).toBe("INSUFFICIENT_BALANCE")
   })
+
+  it("never lets two concurrent requests both withdraw against the same balance (regression: security review Finding #2)", async () => {
+    const driverToken = await loginAs(fx.driver1.phone)
+    await prisma.wallet.update({ where: { userId: fx.driver1.userId }, data: { balance: 300 } })
+
+    // Two simultaneous requests for 200 each against a balance of 300 —
+    // at most one can legitimately succeed.
+    const [first, second] = await Promise.all([
+      request(app).post("/v1/driver/me/payouts").set(auth(driverToken)).send({ amount: 200, method: "card" }),
+      request(app).post("/v1/driver/me/payouts").set(auth(driverToken)).send({ amount: 200, method: "card" }),
+    ])
+    const statuses = [first.status, second.status].sort()
+    expect(statuses).toEqual([201, 400])
+
+    const wallet = await prisma.wallet.findUnique({ where: { userId: fx.driver1.userId } })
+    expect(wallet?.balance).toBe(100)
+    expect(wallet?.pendingBalance).toBe(200)
+  })
 })
 
 // ---------------------------------------------------------------------
@@ -545,5 +563,25 @@ describe("Admin roles", () => {
       expect(res.status).toBe(201)
       expect(res.body.user.adminProfile.role).toBe(role)
     }
+  })
+
+  it("blocks a low-trust admin role from reading payout/payment/webhook data (regression: security review Finding #4)", async () => {
+    const readOnlyUser = await prisma.user.create({
+      data: {
+        fullName: "Read Only Admin", phone: "+923100000097", role: "admin", status: "active", phoneVerifiedAt: new Date(),
+        passwordHash: (await prisma.user.findUniqueOrThrow({ where: { id: fx.admin.userId } })).passwordHash,
+        adminProfile: { create: { role: "read_only" } },
+      },
+    })
+    const readOnlyToken = await loginAs(readOnlyUser.phone)
+
+    for (const path of ["/v1/admin/payouts", "/v1/admin/payments", "/v1/admin/commissions", "/v1/admin/webhooks"]) {
+      const res = await request(app).get(path).set(auth(readOnlyToken))
+      expect(res.status).toBe(403)
+    }
+
+    const adminToken = await loginAdmin()
+    const allowed = await request(app).get("/v1/admin/payouts").set(auth(adminToken))
+    expect(allowed.status).toBe(200)
   })
 })

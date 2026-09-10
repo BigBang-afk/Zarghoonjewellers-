@@ -14,6 +14,7 @@ import { requestPayout, cancelPayout } from "../../services/payoutService.js"
 import { DocType, PaymentMethod } from "../../types/enums.js"
 import { getSetting } from "../../config/settings.js"
 import { recordFailure } from "../../services/observability.js"
+import { paymentRateLimit } from "../../middleware/rateLimit.js"
 
 export const driverRouter = Router()
 driverRouter.use(requireAuth, requireRole("driver"))
@@ -331,6 +332,7 @@ driverRouter.get(
 
 driverRouter.post(
   "/me/payouts",
+  paymentRateLimit,
   validateBody(z.object({ amount: z.number().positive(), method: z.enum(PaymentMethod) })),
   asyncHandler(async (req, res) => {
     const driver = await getDriverProfileOrThrow(req.auth!.userId)

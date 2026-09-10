@@ -41,4 +41,10 @@ if (env.isProduction) {
   if (env.jwtAccessSecret.includes("dev-") || env.jwtRefreshSecret.includes("dev-")) {
     throw new Error("Refusing to start in production with default dev JWT secrets. Set JWT_ACCESS_SECRET / JWT_REFRESH_SECRET.")
   }
+  if (env.paymentsWebhookSecret.includes("dev-")) {
+    // Left unguarded, anyone reading this public source could compute a
+    // valid webhook signature against the known default and mark
+    // arbitrary payments/payouts as completed.
+    throw new Error("Refusing to start in production with the default dev webhook secret. Set PAYMENTS_PROVIDER_WEBHOOK_SECRET.")
+  }
 }
