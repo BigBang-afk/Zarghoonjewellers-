@@ -62,6 +62,9 @@ const createRequestSchema = z.object({
   bookingMode: z.enum(["quick_match", "competitive_offer"]),
   proposedFare: z.number().positive().optional(),
   paymentMethod: z.enum(["cash", "card", "wallet", "local_provider"]).default("cash"),
+  preferFavoriteDriver: z.boolean().optional(),
+  promoCode: z.string().trim().min(1).max(20).optional(),
+  businessAccountId: z.string().uuid().optional(),
 })
 
 ridesRouter.post(
@@ -71,6 +74,14 @@ ridesRouter.post(
   validateBody(createRequestSchema),
   asyncHandler(async (req, res) => {
     const passenger = await getPassengerProfileOrThrow(req.auth!.userId)
+
+    if (req.body.businessAccountId) {
+      const membership = await prisma.businessEmployee.findUnique({
+        where: { businessAccountId_userId: { businessAccountId: req.body.businessAccountId, userId: req.auth!.userId } },
+      })
+      if (!membership) throw ApiError.forbidden("You are not a member of this business account.")
+    }
+
     const result = await createRideRequest({
       passengerId: passenger.id,
       passengerUserId: req.auth!.userId,
@@ -131,8 +142,22 @@ ridesRouter.get(
       orderBy: { createdAt: "asc" },
     })
 
+    const pendingCount = offers.filter((o) => o.status === "pending").length
+    const respondedCount = offers.filter((o) => o.status === "accepted" || o.counterOffers.length > 0).length
+
     res.json({
       request: { id: request.id, status: request.status, proposedFare: request.proposedFare, suggestedFare: request.suggestedFare },
+      // "3 drivers are considering your request" (Phase 3 §2) — pending
+      // means dispatched-but-not-yet-responded; responded means an
+      // accept or counter has come back.
+      statusMessage:
+        pendingCount > 0
+          ? `${pendingCount} ${pendingCount === 1 ? "driver is" : "drivers are"} considering your request.`
+          : respondedCount > 0
+            ? "All nearby drivers have responded — compare their offers below."
+            : "Waiting for nearby drivers to respond…",
+      pendingCount,
+      respondedCount,
       offers: offers.map((o) => ({
         id: o.id,
         status: o.status,

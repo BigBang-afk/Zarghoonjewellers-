@@ -4,8 +4,9 @@ import { getSetting } from "../config/settings.js"
 import { mapProvider } from "./maps/HaversineMapProvider.js"
 import { computeFare, assertFareWithinGuardrails } from "./fareEngine.js"
 import { findEligibleDrivers } from "./matchingEngine.js"
+import { validatePromoCode, recordPromoRedemption } from "./promoService.js"
 import { notify } from "./notifications/NotificationService.js"
-import { emitToUser } from "../realtime/socket.js"
+import { emitToUser, emitToAdmin } from "../realtime/socket.js"
 import type { BookingMode, PaymentMethod } from "../types/enums.js"
 
 export interface CreateRideRequestInput {
@@ -19,12 +20,22 @@ export interface CreateRideRequestInput {
   bookingMode: BookingMode
   proposedFare?: number
   paymentMethod: PaymentMethod
+  preferFavoriteDriver?: boolean
+  promoCode?: string
+  businessAccountId?: string | null
+  scheduledRideId?: string | null
+}
+
+async function getFavoriteDriverIds(passengerId: string): Promise<string[]> {
+  const rows = await prisma.favoriteDriver.findMany({ where: { passengerId }, select: { driverId: true } })
+  return rows.map((r) => r.driverId)
 }
 
 export async function createRideRequest(input: CreateRideRequestInput) {
-  const [vehicleType, city] = await Promise.all([
+  const [vehicleType, city, passenger] = await Promise.all([
     prisma.vehicleType.findUnique({ where: { id: input.vehicleTypeId } }),
     prisma.city.findUnique({ where: { id: input.cityId } }),
+    prisma.passengerProfile.findUniqueOrThrow({ where: { id: input.passengerId } }),
   ])
   if (!vehicleType || !vehicleType.isActive) throw ApiError.badRequest("INVALID_VEHICLE_TYPE", "Vehicle type not available.")
   if (!city || city.status !== "live") throw ApiError.badRequest("CITY_NOT_LIVE", "RIVO is not yet live in this city.")
@@ -42,6 +53,18 @@ export async function createRideRequest(input: CreateRideRequestInput) {
   if (input.bookingMode === "competitive_offer" && input.proposedFare != null) {
     assertFareWithinGuardrails(input.proposedFare, fare)
     proposedFare = input.proposedFare
+  }
+
+  let promoResult: { promotionId: string; discountAmount: number } | null = null
+  if (input.promoCode) {
+    promoResult = await validatePromoCode({
+      code: input.promoCode,
+      userId: input.passengerUserId,
+      passengerCompletedRides: passenger.completedRides,
+      cityId: input.cityId,
+      vehicleTypeId: input.vehicleTypeId,
+      fareAmount: proposedFare,
+    })
   }
 
   const [pickup, destination, expiryMinutes, initialRadius] = await Promise.all([
@@ -65,11 +88,20 @@ export async function createRideRequest(input: CreateRideRequestInput) {
       distanceKm: route.distanceKm,
       estDurationMin: route.durationMin,
       paymentMethod: input.paymentMethod,
+      preferFavoriteDriver: input.preferFavoriteDriver ?? false,
+      promotionId: promoResult?.promotionId,
+      discountAmount: promoResult?.discountAmount ?? 0,
+      businessAccountId: input.businessAccountId ?? undefined,
+      scheduledRideId: input.scheduledRideId ?? undefined,
       status: "searching",
       searchRadiusKm: initialRadius,
       expiresAt: new Date(Date.now() + expiryMinutes * 60_000),
     },
   })
+
+  if (promoResult) {
+    await recordPromoRedemption({ promotionId: promoResult.promotionId, userId: input.passengerUserId, discountAmount: promoResult.discountAmount })
+  }
 
   const dispatch =
     input.bookingMode === "quick_match" ? await dispatchQuickMatchNext(request.id) : await dispatchCompetitiveBroadcast(request.id)
@@ -95,17 +127,24 @@ export async function dispatchQuickMatchNext(rideRequestId: string) {
 
   const pickup = await prisma.location.findUniqueOrThrow({ where: { id: request.pickupLocationId } })
   const exclude = await alreadyContactedDriverIds(rideRequestId)
+  const favoriteDriverIds = request.preferFavoriteDriver ? await getFavoriteDriverIds(request.passengerId) : undefined
 
-  const { candidates } = await findEligibleDrivers({
+  const { candidates, staleExcludedCount } = await findEligibleDrivers({
     cityId: request.cityId,
     vehicleTypeId: request.vehicleTypeId,
     pickup: { lat: pickup.lat, lng: pickup.lng },
     excludeDriverIds: exclude,
+    favoriteDriverIds,
     limit: 1,
   })
 
   if (candidates.length === 0) {
-    await expireRequest(rideRequestId, "No drivers were available near your pickup.")
+    await expireRequest(
+      rideRequestId,
+      staleExcludedCount > 0
+        ? "No drivers were available near your pickup (some nearby drivers had stale location data)."
+        : "No drivers were available near your pickup.",
+    )
     return { status: "no_drivers" as const }
   }
 
@@ -134,7 +173,7 @@ export async function dispatchQuickMatchNext(rideRequestId: string) {
   })
   emitToUser(top.userId, "ride_request.created", { rideRequestId, offerId: offer.id })
 
-  return { status: "dispatched" as const, driverId: top.driverId, offerId: offer.id }
+  return { status: "dispatched" as const, driverId: top.driverId, offerId: offer.id, scoreBreakdown: top.scoreBreakdown }
 }
 
 /**
@@ -151,11 +190,13 @@ export async function dispatchCompetitiveBroadcast(rideRequestId: string) {
     getSetting("matching.competitiveOfferMaxDrivers"),
     getSetting("negotiation.offerExpirySec"),
   ])
+  const favoriteDriverIds = request.preferFavoriteDriver ? await getFavoriteDriverIds(request.passengerId) : undefined
 
   const { candidates } = await findEligibleDrivers({
     cityId: request.cityId,
     vehicleTypeId: request.vehicleTypeId,
     pickup: { lat: pickup.lat, lng: pickup.lng },
+    favoriteDriverIds,
     limit: maxDrivers,
   })
 
@@ -195,6 +236,16 @@ export async function dispatchCompetitiveBroadcast(rideRequestId: string) {
     emitToUser(c.userId, "ride_request.created", { rideRequestId })
   }
 
+  await notify({
+    userId: (await prisma.passengerProfile.findUniqueOrThrow({ where: { id: request.passengerId } })).userId,
+    type: "offer_update",
+    title: "Drivers notified",
+    body: `${candidates.length} ${candidates.length === 1 ? "driver is" : "drivers are"} considering your request.`,
+    data: { rideRequestId, driversNotified: candidates.length },
+  })
+
+  emitToAdmin("demand.request_broadcast", { rideRequestId, cityId: request.cityId, driversNotified: candidates.length })
+
   return { status: "dispatched" as const, driversNotified: candidates.length }
 }
 
@@ -207,7 +258,7 @@ export async function expireRequest(rideRequestId: string, reason: string) {
     prisma.rideOffer.updateMany({ where: { rideRequestId, status: "pending" }, data: { status: "expired" } }),
   ])
 
-  const passenger = await prisma.passengerProfile.findUnique({ where: { id: request.passengerId }, include: { user: true } })
+  const passenger = await prisma.passengerProfile.findUnique({ where: { id: request.passengerId } })
   if (passenger) {
     await notify({ userId: passenger.userId, type: "ride_update", title: "Ride request expired", body: reason, data: { rideRequestId } })
   }

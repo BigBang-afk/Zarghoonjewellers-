@@ -13,7 +13,7 @@ export type UserStatus = (typeof UserStatus)[number]
 export const CityStatus = ["planned", "launching", "live", "paused"] as const
 export type CityStatus = (typeof CityStatus)[number]
 
-export const VerificationStatus = ["pending", "approved", "rejected", "expired"] as const
+export const VerificationStatus = ["pending", "under_review", "approved", "rejected", "expired"] as const
 export type VerificationStatus = (typeof VerificationStatus)[number]
 
 export const AvailabilityStatus = ["offline", "online", "on_trip"] as const
@@ -60,6 +60,8 @@ export const TransactionType = [
   "promo_credit",
   "adjustment",
   "refund",
+  "incentive_bonus",
+  "referral_reward",
 ] as const
 export type TransactionType = (typeof TransactionType)[number]
 
@@ -69,8 +71,20 @@ export type NotificationType = (typeof NotificationType)[number]
 export const DiscountType = ["percentage", "flat"] as const
 export type DiscountType = (typeof DiscountType)[number]
 
-export const TicketStatus = ["open", "in_progress", "resolved", "closed"] as const
+export const TicketStatus = ["open", "in_progress", "waiting", "resolved", "closed"] as const
 export type TicketStatus = (typeof TicketStatus)[number]
+
+export const SupportCategory = [
+  "payment",
+  "driver_issue",
+  "passenger_issue",
+  "lost_item",
+  "cancellation",
+  "pricing",
+  "technical",
+  "safety",
+] as const
+export type SupportCategory = (typeof SupportCategory)[number]
 
 export const TicketPriority = ["low", "medium", "high", "urgent"] as const
 export type TicketPriority = (typeof TicketPriority)[number]
@@ -123,3 +137,36 @@ export const TERMINAL_RIDE_STATUSES: RideStatus[] = [
   "cancelled_by_driver",
   "expired",
 ]
+
+// ---------------------------------------------------------------------
+// Phase 3 additions
+// ---------------------------------------------------------------------
+
+export const IncentiveCampaignStatus = ["draft", "active", "ended"] as const
+export type IncentiveCampaignStatus = (typeof IncentiveCampaignStatus)[number]
+
+export const IncentiveProgressStatus = ["in_progress", "completed", "rewarded"] as const
+export type IncentiveProgressStatus = (typeof IncentiveProgressStatus)[number]
+
+export const ReferralStatus = ["pending", "qualified", "rewarded", "rejected"] as const
+export type ReferralStatus = (typeof ReferralStatus)[number]
+
+export const ScheduledRideStatus = ["scheduled", "dispatched", "completed", "cancelled", "expired"] as const
+export type ScheduledRideStatus = (typeof ScheduledRideStatus)[number]
+
+export const BusinessEmployeeRole = ["owner", "member"] as const
+export type BusinessEmployeeRole = (typeof BusinessEmployeeRole)[number]
+
+export const RiskEventType = [
+  "repeated_signup",
+  "promo_abuse",
+  "unusual_cancellation",
+  "impossible_movement",
+  "shared_identifier",
+  "payment_failure",
+  "abnormal_offer_behavior",
+] as const
+export type RiskEventType = (typeof RiskEventType)[number]
+
+export const DisputeDecision = ["refund_passenger", "adjust_driver_payout", "no_action"] as const
+export type DisputeDecision = (typeof DisputeDecision)[number]

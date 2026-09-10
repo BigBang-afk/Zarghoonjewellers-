@@ -5,6 +5,7 @@ import { prisma } from "../../utils/prisma.js"
 import { hashPassword, verifyPassword } from "../../utils/password.js"
 import { issueRefreshToken, revokeRefreshToken, rotateRefreshToken, signAccessToken } from "../../utils/jwt.js"
 import { requestOtp, verifyOtp } from "../../services/otp/OtpService.js"
+import { createReferralCodeForUser, applyReferralCode } from "../../services/referralService.js"
 import { ApiError } from "../../utils/apiError.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
@@ -28,6 +29,7 @@ const registerPassengerSchema = z.object({
   email: z.string().trim().email().optional(),
   password: z.string().min(8).max(72),
   photoUrl: z.string().url().optional(),
+  referredByCode: z.string().trim().max(20).optional(),
 })
 
 const registerDriverSchema = z.object({
@@ -45,6 +47,7 @@ const registerDriverSchema = z.object({
     color: z.string().trim().max(30).optional(),
     plateNumber: z.string().trim().min(3).max(20),
   }),
+  referredByCode: z.string().trim().max(20).optional(),
 })
 
 const loginSchema = z.object({ phone: phoneSchema, password: z.string().min(1) })
@@ -85,7 +88,7 @@ authRouter.post(
   "/register/passenger",
   validateBody(registerPassengerSchema),
   asyncHandler(async (req, res) => {
-    const { fullName, phone, email, password, photoUrl } = req.body
+    const { fullName, phone, email, password, photoUrl, referredByCode } = req.body
 
     const existing = await prisma.user.findUnique({ where: { phone } })
     if (existing) throw ApiError.conflict("PHONE_ALREADY_REGISTERED", "An account with this phone number already exists.")
@@ -105,8 +108,20 @@ authRouter.post(
       },
     })
 
+    await createReferralCodeForUser(user.id, fullName)
+    let referralApplied = false
+    if (referredByCode) {
+      try {
+        await applyReferralCode(user.id, referredByCode)
+        referralApplied = true
+      } catch {
+        // Invalid/self-referral codes never block registration — the
+        // passenger just doesn't get credited with a referrer.
+      }
+    }
+
     const otp = await requestOtp(phone, "registration", user.id)
-    res.status(201).json({ userId: user.id, otp: { requestId: otp.requestId, expiresAt: otp.expiresAt, devCode: otp.devCode } })
+    res.status(201).json({ userId: user.id, referralApplied, otp: { requestId: otp.requestId, expiresAt: otp.expiresAt, devCode: otp.devCode } })
   }),
 )
 
@@ -114,7 +129,7 @@ authRouter.post(
   "/register/driver",
   validateBody(registerDriverSchema),
   asyncHandler(async (req, res) => {
-    const { fullName, phone, email, password, photoUrl, cityId, vehicle } = req.body
+    const { fullName, phone, email, password, photoUrl, cityId, vehicle, referredByCode } = req.body
 
     const existing = await prisma.user.findUnique({ where: { phone } })
     if (existing) throw ApiError.conflict("PHONE_ALREADY_REGISTERED", "An account with this phone number already exists.")
@@ -161,9 +176,21 @@ authRouter.post(
       },
     })
 
+    await createReferralCodeForUser(user.id, fullName)
+    let referralApplied = false
+    if (referredByCode) {
+      try {
+        await applyReferralCode(user.id, referredByCode)
+        referralApplied = true
+      } catch {
+        // Invalid/self-referral codes never block registration.
+      }
+    }
+
     const otp = await requestOtp(phone, "registration", user.id)
     res.status(201).json({
       userId: user.id,
+      referralApplied,
       otp: { requestId: otp.requestId, expiresAt: otp.expiresAt, devCode: otp.devCode },
       note: "Your account and vehicle now await admin document verification before you can go online.",
     })

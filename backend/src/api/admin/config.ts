@@ -157,3 +157,109 @@ adminConfigRouter.put(
     res.json({ settings })
   }),
 )
+
+// ---------------------------------------------------------------------
+// Promotions (Phase 2 §10) — every rule dimension is admin-set, never
+// hard-coded: percentage/flat, max discount, min fare, vehicle type,
+// city, new-users-only, usage limit, expiration.
+// ---------------------------------------------------------------------
+
+const promotionSchema = z.object({
+  code: z.string().trim().min(3).max(20).transform((s) => s.toUpperCase()),
+  description: z.string().trim().max(200).optional(),
+  discountType: z.enum(["percentage", "flat"]),
+  discountValue: z.number().positive(),
+  maxDiscount: z.number().positive().optional(),
+  minFare: z.number().positive().optional(),
+  cityId: z.string().uuid().optional(),
+  vehicleTypeId: z.string().uuid().optional(),
+  newUsersOnly: z.boolean().default(false),
+  usageLimit: z.number().int().positive().optional(),
+  startsAt: z.coerce.date().optional(),
+  expiresAt: z.coerce.date().optional(),
+})
+
+adminConfigRouter.get(
+  "/promotions",
+  asyncHandler(async (_req, res) => {
+    const promotions = await prisma.promotion.findMany({
+      include: { city: true, vehicleType: true },
+      orderBy: { createdAt: "desc" },
+    })
+    res.json({ promotions })
+  }),
+)
+
+adminConfigRouter.post(
+  "/promotions",
+  validateBody(promotionSchema),
+  asyncHandler(async (req, res) => {
+    const existing = await prisma.promotion.findUnique({ where: { code: req.body.code } })
+    if (existing) throw ApiError.conflict("PROMO_CODE_EXISTS", "A promotion with this code already exists.")
+    const promotion = await prisma.promotion.create({ data: { ...req.body, createdById: req.auth!.userId } })
+    await writeAuditLog({ req, action: "promotion.create", targetTable: "promotions", targetId: promotion.id, after: req.body })
+    res.status(201).json({ promotion })
+  }),
+)
+
+adminConfigRouter.put(
+  "/promotions/:id",
+  validateBody(promotionSchema.partial().extend({ isActive: z.boolean().optional() })),
+  asyncHandler(async (req, res) => {
+    const before = await prisma.promotion.findUnique({ where: { id: req.params.id } })
+    if (!before) throw ApiError.notFound("Promotion not found.")
+    const promotion = await prisma.promotion.update({ where: { id: req.params.id }, data: req.body })
+    await writeAuditLog({ req, action: "promotion.update", targetTable: "promotions", targetId: promotion.id, before, after: req.body })
+    res.json({ promotion })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Driver incentive campaigns (Phase 2 §8) — target ride count and reward
+// amount are always admin-set, never hard-coded in application code.
+// ---------------------------------------------------------------------
+
+const incentiveCampaignSchema = z.object({
+  name: z.string().trim().min(3).max(80),
+  description: z.string().trim().max(300).optional(),
+  cityId: z.string().uuid().optional(),
+  vehicleTypeId: z.string().uuid().optional(),
+  targetRideCount: z.number().int().positive(),
+  rewardAmount: z.number().positive(),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+})
+
+adminConfigRouter.get(
+  "/incentive-campaigns",
+  asyncHandler(async (_req, res) => {
+    const campaigns = await prisma.incentiveCampaign.findMany({
+      include: { city: true, vehicleType: true, _count: { select: { progress: true, rewards: true } } },
+      orderBy: { createdAt: "desc" },
+    })
+    res.json({ campaigns })
+  }),
+)
+
+adminConfigRouter.post(
+  "/incentive-campaigns",
+  validateBody(incentiveCampaignSchema),
+  asyncHandler(async (req, res) => {
+    if (req.body.endDate <= req.body.startDate) throw ApiError.badRequest("INVALID_DATE_RANGE", "endDate must be after startDate.")
+    const campaign = await prisma.incentiveCampaign.create({ data: { ...req.body, createdById: req.auth!.userId } })
+    await writeAuditLog({ req, action: "incentive_campaign.create", targetTable: "incentive_campaigns", targetId: campaign.id, after: req.body })
+    res.status(201).json({ campaign })
+  }),
+)
+
+adminConfigRouter.put(
+  "/incentive-campaigns/:id",
+  validateBody(incentiveCampaignSchema.partial().extend({ status: z.enum(["draft", "active", "ended"]).optional() })),
+  asyncHandler(async (req, res) => {
+    const before = await prisma.incentiveCampaign.findUnique({ where: { id: req.params.id } })
+    if (!before) throw ApiError.notFound("Campaign not found.")
+    const campaign = await prisma.incentiveCampaign.update({ where: { id: req.params.id }, data: req.body })
+    await writeAuditLog({ req, action: "incentive_campaign.update", targetTable: "incentive_campaigns", targetId: campaign.id, before, after: req.body })
+    res.json({ campaign })
+  }),
+)

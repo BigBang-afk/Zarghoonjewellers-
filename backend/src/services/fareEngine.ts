@@ -9,10 +9,16 @@ export interface FareBreakdown {
   subtotal: number
   demandMultiplier: number
   suggestedFare: number
+  /** Typical marketplace range around the suggested fare — an estimate,
+   * not a quote; the actual ride may settle anywhere the negotiation
+   * guardrails allow (Phase 3 §3: "clearly label estimates"). */
+  typicalRangeLow: number
+  typicalRangeHigh: number
   minimumFare: number
   maximumFare: number | null
   commissionRate: number
   fareRuleId: string
+  isEstimate: true
 }
 
 /**
@@ -77,6 +83,15 @@ export async function computeFare(input: {
   suggestedFare = Math.max(rule.minimumFare, suggestedFare)
   if (rule.maximumFare != null) suggestedFare = Math.min(rule.maximumFare, suggestedFare)
 
+  const rangeSpreadPct = await getSetting("fare.rangeSpreadPct")
+  const clampRange = (v: number) => {
+    let clamped = Math.max(rule.minimumFare, v)
+    if (rule.maximumFare != null) clamped = Math.min(rule.maximumFare, clamped)
+    return round2(clamped)
+  }
+  const typicalRangeLow = clampRange(suggestedFare * (1 - rangeSpreadPct))
+  const typicalRangeHigh = clampRange(suggestedFare * (1 + rangeSpreadPct))
+
   return {
     baseFare,
     distanceCharge,
@@ -84,10 +99,13 @@ export async function computeFare(input: {
     subtotal,
     demandMultiplier: clampedMultiplier,
     suggestedFare,
+    typicalRangeLow,
+    typicalRangeHigh,
     minimumFare: rule.minimumFare,
     maximumFare: rule.maximumFare,
     commissionRate: rule.commissionRate,
     fareRuleId: rule.id,
+    isEstimate: true,
   }
 }
 

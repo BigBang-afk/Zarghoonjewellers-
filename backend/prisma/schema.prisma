@@ -1,5 +1,12 @@
 // =====================================================================
-// RIVO — Phase 2 Prisma schema
+// RIVO — Phase 2 + Phase 3 Prisma schema
+//
+// Phase 3 additions (marketplace intelligence, retention, trust/safety,
+// ops): incentive campaigns, referrals, favorite drivers, scheduled
+// rides, business accounts, risk/fraud signals, notification
+// preferences, promo redemption tracking, and driver online-session
+// logging for accurate earnings/hour. All additive — no Phase 1/2 table
+// was renamed or removed; see docs/13-phase-3-completion-report.md.
 //
 // Implements the Phase 1 entity model (docs/08-database-schema.sql) as a
 // runnable application schema. Two portability notes vs. the canonical
@@ -52,6 +59,8 @@ model City {
   timezone        String
   centerLat       Float?
   centerLng       Float?
+  /// JSON-encoded weekly schedule, e.g. {"mon":["00:00","23:59"],...}; null = 24/7
+  operatingHours  String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   deletedAt       DateTime?
@@ -64,6 +73,9 @@ model City {
   rideRequests    RideRequest[]
   cityVehicleTypes CityVehicleType[]
   promotions      Promotion[]
+  incentiveCampaigns IncentiveCampaign[]
+  scheduledRides  ScheduledRide[]
+  businessAccounts BusinessAccount[]
 
   @@unique([countryId, name])
   @@index([status])
@@ -106,6 +118,9 @@ model VehicleType {
   fareRules      FareRule[]
   rideRequests   RideRequest[]
   cityVehicleTypes CityVehicleType[]
+  incentiveCampaigns IncentiveCampaign[]
+  promotions      Promotion[]
+  scheduledRides  ScheduledRide[]
 
   @@map("vehicle_types")
 }
@@ -166,6 +181,16 @@ model User {
   createdPromotions Promotion[]
   statusChanges     RideStatusHistory[]
 
+  referralCode      ReferralCode?
+  referralsMade     Referral[] @relation("Referrer")
+  referralReceived  Referral?  @relation("Referred")
+  riskEvents        RiskEvent[]
+  riskScore         RiskScore?
+  notificationPreferences NotificationPreference[]
+  promoRedemptions  PromoRedemption[]
+  businessEmployeeOf BusinessEmployee[]
+  billingContactFor BusinessAccount[] @relation("BusinessBillingContact")
+
   @@index([role, status])
   @@map("users")
 }
@@ -183,11 +208,13 @@ model PassengerProfile {
   user            User     @relation(fields: [userId], references: [id])
   rideRequests    RideRequest[]
   rides           Ride[]
+  favoriteDrivers FavoriteDriver[]
+  scheduledRides  ScheduledRide[]
 
   @@map("passenger_profiles")
 }
 
-/// verificationStatus: pending | approved | rejected | expired
+/// verificationStatus: pending | under_review | approved | rejected | expired
 /// availabilityStatus: offline | online | on_trip
 model DriverProfile {
   id                  String   @id @default(uuid())
@@ -216,6 +243,10 @@ model DriverProfile {
   vehicles            Vehicle[]
   rideOffers          RideOffer[]
   rides               Ride[]
+  onlineSessions      DriverOnlineSession[]
+  incentiveProgress   DriverIncentiveProgress[]
+  incentiveRewards    IncentiveReward[]
+  favoritedBy         FavoriteDriver[]
 
   @@index([cityId, availabilityStatus])
   @@index([verificationStatus])
@@ -314,6 +345,8 @@ model Location {
   destinationFor  RideRequest[] @relation("RequestDestination")
   ridePickupFor      Ride[] @relation("RidePickup")
   rideDestinationFor Ride[] @relation("RideDestination")
+  scheduledPickupFor      ScheduledRide[] @relation("ScheduledPickup")
+  scheduledDestinationFor ScheduledRide[] @relation("ScheduledDestination")
 
   @@index([userId])
   @@map("locations")
@@ -334,6 +367,7 @@ model FareRule {
   minimumFare           Float
   maximumFare           Float?
   commissionRate        Float    // e.g. 0.15 = 15%
+  commissionFlatFee     Float    @default(0) // added to the percentage cut, e.g. a flat booking fee
   surgeMinMultiplier    Float    @default(1.0)
   surgeMaxMultiplier    Float    @default(2.5)
   isActive              Boolean  @default(true)
@@ -383,6 +417,11 @@ model RideRequest {
   paymentMethod                String   @default("cash")
   status                        String   @default("searching")
   searchRadiusKm                Float    @default(5)
+  preferFavoriteDriver          Boolean  @default(false)
+  promotionId                   String?
+  discountAmount                Float    @default(0)
+  businessAccountId             String?
+  scheduledRideId               String?  @unique
   expiresAt                     DateTime
   createdAt                     DateTime @default(now())
   updatedAt                     DateTime @updatedAt
@@ -393,6 +432,9 @@ model RideRequest {
   vehicleType  VehicleType      @relation(fields: [vehicleTypeId], references: [id])
   pickup       Location         @relation("RequestPickup", fields: [pickupLocationId], references: [id])
   destination  Location         @relation("RequestDestination", fields: [destinationLocationId], references: [id])
+  promotion    Promotion?       @relation(fields: [promotionId], references: [id])
+  businessAccount BusinessAccount? @relation(fields: [businessAccountId], references: [id])
+  scheduledRide   ScheduledRide?   @relation(fields: [scheduledRideId], references: [id])
   offers       RideOffer[]
   ride         Ride?
 
@@ -467,6 +509,7 @@ model Ride {
   durationMin                   Int?
   paymentMethod                  String   @default("cash")
   status                         String   @default("driver_selected")
+  businessAccountId              String?
   shareToken                     String?  @unique
   acceptedAt                     DateTime @default(now())
   arrivedAt                      DateTime?
@@ -484,6 +527,7 @@ model Ride {
   vehicle       Vehicle          @relation(fields: [vehicleId], references: [id])
   pickup        Location         @relation("RidePickup", fields: [pickupLocationId], references: [id])
   destination   Location         @relation("RideDestination", fields: [destinationLocationId], references: [id])
+  businessAccount BusinessAccount? @relation(fields: [businessAccountId], references: [id])
 
   locations     RideLocation[]
   statusHistory RideStatusHistory[]
@@ -542,7 +586,10 @@ model Promotion {
   discountType    String
   discountValue   Float
   maxDiscount     Float?
+  minFare         Float?
   cityId          String?
+  vehicleTypeId   String?
+  newUsersOnly    Boolean  @default(false)
   usageLimit      Int?
   usageCount      Int      @default(0)
   startsAt        DateTime @default(now())
@@ -552,9 +599,12 @@ model Promotion {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  city            City?    @relation(fields: [cityId], references: [id])
-  createdBy       User?    @relation(fields: [createdById], references: [id])
+  city            City?        @relation(fields: [cityId], references: [id])
+  vehicleType     VehicleType? @relation(fields: [vehicleTypeId], references: [id])
+  createdBy       User?        @relation(fields: [createdById], references: [id])
   payments        Payment[]
+  redemptions     PromoRedemption[]
+  rideRequests    RideRequest[]
 
   @@index([isActive, expiresAt])
   @@map("promotions")
@@ -612,7 +662,8 @@ model Wallet {
   @@map("wallets")
 }
 
-/// type: ride_charge | ride_payout | commission | wallet_topup | withdrawal | promo_credit | adjustment | refund
+/// type: ride_charge | ride_payout | commission | wallet_topup | withdrawal |
+///       promo_credit | adjustment | refund | incentive_bonus | referral_reward
 model Transaction {
   id              String   @id @default(uuid())
   walletId        String
@@ -700,12 +751,14 @@ model Notification {
 // Support, disputes, safety
 // ---------------------------------------------------------------------
 
-/// status: open | in_progress | resolved | closed
+/// category: payment | driver_issue | passenger_issue | lost_item | cancellation | pricing | technical | safety
+/// status: open | in_progress | waiting | resolved | closed
 /// priority: low | medium | high | urgent
 model SupportTicket {
   id                  String   @id @default(uuid())
   userId              String
   rideId              String?
+  category            String   @default("technical")
   subject             String
   description         String?
   status              String   @default("open")
@@ -730,6 +783,7 @@ model Dispute {
   raisedById      String
   againstUserId   String?
   reason          String
+  evidence        String?  // JSON-encoded string[] of attachment URLs/descriptions
   status          String   @default("open")
   resolution      String?
   resolvedById    String?
@@ -841,4 +895,286 @@ model OtpCode {
 
   @@index([phone, purpose])
   @@map("otp_codes")
+}
+
+// =====================================================================
+// Phase 3 — marketplace intelligence, retention, trust, ops
+// =====================================================================
+
+// ---------------------------------------------------------------------
+// Driver incentives (Phase 2 §8): admin-configurable campaigns, per-driver
+// progress, and issued rewards — never a hard-coded bonus amount.
+// ---------------------------------------------------------------------
+
+/// status: draft | active | ended
+model IncentiveCampaign {
+  id              String   @id @default(uuid())
+  name            String
+  description     String?
+  cityId          String?
+  vehicleTypeId   String?
+  targetRideCount Int
+  rewardAmount    Float
+  startDate       DateTime
+  endDate         DateTime
+  status          String   @default("active")
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  city            City?        @relation(fields: [cityId], references: [id])
+  vehicleType     VehicleType? @relation(fields: [vehicleTypeId], references: [id])
+  progress        DriverIncentiveProgress[]
+  rewards         IncentiveReward[]
+
+  @@index([status, startDate, endDate])
+  @@map("incentive_campaigns")
+}
+
+/// status: in_progress | completed | rewarded
+model DriverIncentiveProgress {
+  id            String   @id @default(uuid())
+  driverId      String
+  campaignId    String
+  currentCount  Int      @default(0)
+  status        String   @default("in_progress")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  driver        DriverProfile     @relation(fields: [driverId], references: [id])
+  campaign      IncentiveCampaign @relation(fields: [campaignId], references: [id])
+
+  @@unique([driverId, campaignId])
+  @@map("driver_incentive_progress")
+}
+
+model IncentiveReward {
+  id            String   @id @default(uuid())
+  driverId      String
+  campaignId    String
+  amount        Float
+  transactionId String?
+  awardedAt     DateTime @default(now())
+
+  driver        DriverProfile     @relation(fields: [driverId], references: [id])
+  campaign      IncentiveCampaign @relation(fields: [campaignId], references: [id])
+
+  @@index([driverId])
+  @@map("incentive_rewards")
+}
+
+// ---------------------------------------------------------------------
+// Referrals (Phase 2 §11)
+// ---------------------------------------------------------------------
+
+model ReferralCode {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  code      String   @unique
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("referral_codes")
+}
+
+/// status: pending | qualified | rewarded | rejected
+model Referral {
+  id                    String   @id @default(uuid())
+  referrerUserId        String
+  referredUserId        String   @unique
+  code                  String
+  status                String   @default("pending")
+  qualifyingAction      String?  // e.g. "first_ride_completed"
+  rewardAmountReferrer  Float?
+  rewardAmountReferred  Float?
+  qualifiedAt           DateTime?
+  rewardedAt            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  referrer              User     @relation("Referrer", fields: [referrerUserId], references: [id])
+  referred              User     @relation("Referred", fields: [referredUserId], references: [id])
+
+  @@index([referrerUserId, status])
+  @@map("referrals")
+}
+
+// ---------------------------------------------------------------------
+// Favorite drivers (Phase 2 §12)
+// ---------------------------------------------------------------------
+
+model FavoriteDriver {
+  id           String   @id @default(uuid())
+  passengerId  String
+  driverId     String
+  createdAt    DateTime @default(now())
+
+  passenger    PassengerProfile @relation(fields: [passengerId], references: [id])
+  driver       DriverProfile    @relation(fields: [driverId], references: [id])
+
+  @@unique([passengerId, driverId])
+  @@map("favorite_drivers")
+}
+
+// ---------------------------------------------------------------------
+// Scheduled rides (Phase 2 §13)
+// ---------------------------------------------------------------------
+
+/// status: scheduled | dispatched | completed | cancelled | expired
+model ScheduledRide {
+  id                      String   @id @default(uuid())
+  passengerId             String
+  cityId                  String
+  zoneId                  String?
+  vehicleTypeId           String
+  pickupLocationId        String
+  destinationLocationId   String
+  bookingMode             String   @default("quick_match")
+  proposedFare            Float?
+  scheduledFor            DateTime
+  status                  String   @default("scheduled")
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  passenger    PassengerProfile @relation(fields: [passengerId], references: [id])
+  city         City             @relation(fields: [cityId], references: [id])
+  vehicleType  VehicleType      @relation(fields: [vehicleTypeId], references: [id])
+  pickup       Location         @relation("ScheduledPickup", fields: [pickupLocationId], references: [id])
+  destination  Location         @relation("ScheduledDestination", fields: [destinationLocationId], references: [id])
+  rideRequest  RideRequest?
+
+  @@index([status, scheduledFor])
+  @@map("scheduled_rides")
+}
+
+// ---------------------------------------------------------------------
+// Business / corporate accounts (Phase 2 §14) — architecture only, no
+// deep billing engine yet, per the phase brief.
+// ---------------------------------------------------------------------
+
+model BusinessAccount {
+  id                  String   @id @default(uuid())
+  companyName         String
+  billingContactUserId String
+  cityId              String
+  paymentMethod       String   @default("wallet")
+  monthlySpendLimit   Float?
+  ridePolicy          String?  // JSON-encoded policy (e.g. allowed vehicle types, hours)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  billingContact      User     @relation("BusinessBillingContact", fields: [billingContactUserId], references: [id])
+  city                City     @relation(fields: [cityId], references: [id])
+  employees           BusinessEmployee[]
+  rideRequests        RideRequest[]
+  rides               Ride[]
+
+  @@map("business_accounts")
+}
+
+/// role: owner | member
+model BusinessEmployee {
+  id                String   @id @default(uuid())
+  businessAccountId String
+  userId            String
+  role              String   @default("member")
+  createdAt         DateTime @default(now())
+
+  businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id])
+  user              User            @relation(fields: [userId], references: [id])
+
+  @@unique([businessAccountId, userId])
+  @@map("business_employees")
+}
+
+// ---------------------------------------------------------------------
+// Fraud / risk monitoring (Phase 2 §22) — signals feed a score; a human
+// always reviews before any punitive action (no auto-punish-on-signal).
+// ---------------------------------------------------------------------
+
+/// type: repeated_signup | promo_abuse | unusual_cancellation |
+///       impossible_movement | shared_identifier | payment_failure | abnormal_offer_behavior
+/// severity: low | medium | high | critical
+model RiskEvent {
+  id          String   @id @default(uuid())
+  userId      String
+  type        String
+  severity    String   @default("low")
+  details     String?  // JSON-encoded
+  reviewedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([severity, reviewedAt])
+  @@map("risk_events")
+}
+
+model RiskScore {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  score       Float    @default(0)
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("risk_scores")
+}
+
+// ---------------------------------------------------------------------
+// Notification preferences (Phase 2 §20)
+// ---------------------------------------------------------------------
+
+model NotificationPreference {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // matches NotificationType — ride_update|offer_update|promo|system|safety
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, type])
+  @@map("notification_preferences")
+}
+
+// ---------------------------------------------------------------------
+// Promo redemption tracking (Phase 2 §10) — one redemption per user per
+// code by default, enforced by the unique constraint, not just app logic.
+// ---------------------------------------------------------------------
+
+model PromoRedemption {
+  id            String   @id @default(uuid())
+  promotionId   String
+  userId        String
+  rideId        String?
+  discountAmount Float
+  createdAt     DateTime @default(now())
+
+  promotion     Promotion @relation(fields: [promotionId], references: [id])
+  user          User      @relation(fields: [userId], references: [id])
+
+  @@unique([promotionId, userId])
+  @@map("promo_redemptions")
+}
+
+// ---------------------------------------------------------------------
+// Driver online sessions — logs each online/offline toggle so earnings
+// "per hour" and incentive "opportunity" signals are computed from real
+// elapsed time rather than approximated.
+// ---------------------------------------------------------------------
+
+model DriverOnlineSession {
+  id         String    @id @default(uuid())
+  driverId   String
+  startedAt  DateTime  @default(now())
+  endedAt    DateTime?
+
+  driver     DriverProfile @relation(fields: [driverId], references: [id])
+
+  @@index([driverId, startedAt])
+  @@map("driver_online_sessions")
 }

@@ -68,6 +68,21 @@ export async function driverCounterOffer(offerId: string, driverProfileId: strin
   const rule = await resolveFareRule(offer.rideRequest.cityId, offer.rideRequest.vehicleTypeId, offer.rideRequest.zoneId)
   assertFareWithinGuardrails(counterPrice, rule)
 
+  const maxDeviationPct = await getSetting("negotiation.maxCounterDeviationPct")
+  const maxDeviation = offer.offerPrice * maxDeviationPct
+  if (Math.abs(counterPrice - offer.offerPrice) > maxDeviation) {
+    throw ApiError.badRequest(
+      "COUNTER_DEVIATION_TOO_LARGE",
+      `Counter-offers must be within ${Math.round(maxDeviationPct * 100)}% of the requested fare (Rs ${offer.offerPrice}).`,
+    )
+  }
+
+  const maxRounds = await getSetting("negotiation.maxCounterRounds")
+  const existingRounds = await prisma.counterOffer.count({ where: { rideOfferId: offer.id } })
+  if (existingRounds >= maxRounds) {
+    throw ApiError.conflict("COUNTER_LIMIT_REACHED", "This request has reached its maximum number of counter-offers.")
+  }
+
   const expirySec = await getSetting("negotiation.counterOfferExpirySec")
   const counterOffer = await prisma.counterOffer.create({
     data: { rideOfferId: offer.id, counterPrice, status: "pending", expiresAt: new Date(Date.now() + expirySec * 1000) },

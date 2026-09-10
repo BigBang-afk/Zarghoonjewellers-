@@ -1,6 +1,7 @@
 import { Router } from "express"
 import { prisma } from "../../utils/prisma.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
+import { getSetting } from "../../config/settings.js"
 
 export const adminDashboardRouter = Router()
 
@@ -87,10 +88,13 @@ adminDashboardRouter.get(
   "/live-map",
   asyncHandler(async (req, res) => {
     const cityId = req.query.cityId as string | undefined
+    const stalenessMinutes = await getSetting("matching.locationStalenessMinutes")
+    const staleCutoff = new Date(Date.now() - stalenessMinutes * 60_000)
+
     const [drivers, activeRides, pendingRequests] = await Promise.all([
       prisma.driverProfile.findMany({
         where: { availabilityStatus: { in: ["online", "on_trip"] }, ...(cityId ? { cityId } : {}), lastLat: { not: null } },
-        select: { id: true, availabilityStatus: true, lastLat: true, lastLng: true },
+        select: { id: true, availabilityStatus: true, lastLat: true, lastLng: true, lastLocationAt: true },
       }),
       prisma.ride.findMany({
         where: { status: { notIn: ["ride_completed", "cancelled_by_passenger", "cancelled_by_driver", "expired", "disputed"] } },
@@ -100,10 +104,123 @@ adminDashboardRouter.get(
     ])
 
     res.json({
-      drivers: drivers.map((d) => ({ id: d.id, status: d.availabilityStatus, lat: d.lastLat, lng: d.lastLng })),
+      drivers: drivers.map((d) => ({
+        id: d.id,
+        status: d.availabilityStatus,
+        lat: d.lastLat,
+        lng: d.lastLng,
+        lastLocationAt: d.lastLocationAt,
+        // Phase 3 §21: surfaces drivers whose location hasn't refreshed
+        // recently, so ops can spot a dead/backgrounded app rather than
+        // trusting a stale pin.
+        locationStale: !d.lastLocationAt || d.lastLocationAt < staleCutoff,
+      })),
       activeRides: activeRides.map((r) => ({ id: r.id, status: r.status, pickup: r.pickup, destination: r.destination })),
       pendingRequestsCount: pendingRequests,
+      staleDriverCount: drivers.filter((d) => !d.lastLocationAt || d.lastLocationAt < staleCutoff).length,
     })
+  }),
+)
+
+/**
+ * Live demand heat-map (Phase 3 §4): a coarse lat/lng grid over the
+ * city's currently-active area (bounded by where online drivers and open
+ * requests actually are, not a fixed box), with per-cell demand ratio,
+ * driver supply, and recent cancellation rate — all computed from real
+ * rows, not simulated. Pricing itself still only ever moves through the
+ * FareRule's admin-configured surge bounds (see fareEngine.ts); this
+ * endpoint is read-only visibility, not a second pricing path.
+ */
+adminDashboardRouter.get(
+  "/demand-map",
+  asyncHandler(async (req, res) => {
+    const cityId = req.query.cityId as string | undefined
+    if (!cityId) return res.status(400).json({ error: { code: "CITY_REQUIRED", message: "cityId is required." } })
+
+    const gridSize = Math.min(10, Math.max(2, Number(req.query.gridSize) || 5))
+    const since24h = new Date(Date.now() - 24 * 3_600_000)
+
+    const [onlineDrivers, openRequests, recentRides] = await Promise.all([
+      prisma.driverProfile.findMany({
+        where: { cityId, availabilityStatus: "online", lastLat: { not: null }, lastLng: { not: null } },
+        select: { lastLat: true, lastLng: true },
+      }),
+      prisma.rideRequest.findMany({
+        where: { cityId, status: { in: ["searching", "offers_open"] } },
+        include: { pickup: { select: { lat: true, lng: true } } },
+      }),
+      prisma.ride.findMany({
+        where: { rideRequest: { cityId }, createdAt: { gte: since24h } },
+        select: { status: true, pickup: { select: { lat: true, lng: true } } },
+      }),
+    ])
+
+    const points = [
+      ...onlineDrivers.map((d) => ({ lat: d.lastLat!, lng: d.lastLng! })),
+      ...openRequests.map((r) => ({ lat: r.pickup.lat, lng: r.pickup.lng })),
+      ...recentRides.map((r) => ({ lat: r.pickup.lat, lng: r.pickup.lng })),
+    ]
+    if (points.length === 0) return res.json({ cells: [], gridSize })
+
+    const lats = points.map((p) => p.lat)
+    const lngs = points.map((p) => p.lng)
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats)
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs)
+    const latStep = (maxLat - minLat || 0.01) / gridSize
+    const lngStep = (maxLng - minLng || 0.01) / gridSize
+
+    function cellIndex(lat: number, lng: number) {
+      const row = Math.min(gridSize - 1, Math.floor((lat - minLat) / latStep))
+      const col = Math.min(gridSize - 1, Math.floor((lng - minLng) / lngStep))
+      return `${row}:${col}`
+    }
+
+    const cells = new Map<string, { row: number; col: number; onlineDrivers: number; openRequests: number; completedRides: number; cancelledRides: number }>()
+    function getCell(row: number, col: number) {
+      const key = `${row}:${col}`
+      if (!cells.has(key)) cells.set(key, { row, col, onlineDrivers: 0, openRequests: 0, completedRides: 0, cancelledRides: 0 })
+      return cells.get(key)!
+    }
+
+    for (const d of onlineDrivers) {
+      const [row, col] = cellIndex(d.lastLat!, d.lastLng!).split(":").map(Number)
+      getCell(row, col).onlineDrivers++
+    }
+    for (const r of openRequests) {
+      const [row, col] = cellIndex(r.pickup.lat, r.pickup.lng).split(":").map(Number)
+      getCell(row, col).openRequests++
+    }
+    for (const r of recentRides) {
+      const [row, col] = cellIndex(r.pickup.lat, r.pickup.lng).split(":").map(Number)
+      const cell = getCell(row, col)
+      if (r.status === "ride_completed") cell.completedRides++
+      if (r.status === "cancelled_by_passenger" || r.status === "cancelled_by_driver") cell.cancelledRides++
+    }
+
+    const cancellationThreshold = await getSetting("risk.cancellationRateThresholdPct")
+
+    const result = [...cells.values()].map((c) => {
+      const demandRatio = c.openRequests / Math.max(1, c.onlineDrivers)
+      const totalRecentRides = c.completedRides + c.cancelledRides
+      const cancellationRatePct = totalRecentRides ? round2((c.cancelledRides / totalRecentRides) * 100) : 0
+      return {
+        row: c.row,
+        col: c.col,
+        centerLat: round2(minLat + latStep * (c.row + 0.5)),
+        centerLng: round2(minLng + lngStep * (c.col + 0.5)),
+        onlineDrivers: c.onlineDrivers,
+        openRequests: c.openRequests,
+        demandRatio: round2(demandRatio),
+        cancellationRatePct,
+        flags: {
+          highDemand: demandRatio > 1.5,
+          lowSupply: c.onlineDrivers === 0 && c.openRequests > 0,
+          highCancellation: totalRecentRides >= 3 && cancellationRatePct >= cancellationThreshold,
+        },
+      }
+    })
+
+    res.json({ cells: result, gridSize, bounds: { minLat, maxLat, minLng, maxLng } })
   }),
 )
 

@@ -3,6 +3,7 @@ import { createApp } from "./app.js"
 import { env } from "./config/env.js"
 import { initSocket } from "./realtime/socket.js"
 import { sweepExpiredNegotiations } from "./services/negotiationEngine.js"
+import { dispatchDueScheduledRides } from "./services/scheduledRideService.js"
 
 const app = createApp()
 const httpServer = createServer(app)
@@ -18,6 +19,16 @@ setInterval(() => {
     console.error("Negotiation sweep failed:", err)
   })
 }, SWEEP_INTERVAL_MS)
+
+// Scheduled-ride dispatch (Phase 2 §13) — checked less frequently since
+// lead time is measured in minutes, not seconds.
+const SCHEDULED_RIDE_SWEEP_INTERVAL_MS = 60_000
+setInterval(() => {
+  dispatchDueScheduledRides().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error("Scheduled ride dispatch sweep failed:", err)
+  })
+}, SCHEDULED_RIDE_SWEEP_INTERVAL_MS)
 
 httpServer.listen(env.port, () => {
   // eslint-disable-next-line no-console

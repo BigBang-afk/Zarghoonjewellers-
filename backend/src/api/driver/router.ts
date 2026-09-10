@@ -7,6 +7,8 @@ import { requireAuth, requireRole } from "../../middleware/auth.js"
 import { getDriverProfileOrThrow } from "../../shared/profileLookup.js"
 import { ApiError } from "../../utils/apiError.js"
 import { emitToAdmin } from "../../realtime/socket.js"
+import { checkImpossibleMovement } from "../../services/riskService.js"
+import { getDriverIncentiveSummary } from "../../services/incentiveService.js"
 
 export const driverRouter = Router()
 driverRouter.use(requireAuth, requireRole("driver"))
@@ -27,6 +29,21 @@ driverRouter.patch(
       throw ApiError.forbidden("Your account is still pending verification. You can't go online yet.")
     }
     const updated = await prisma.driverProfile.update({ where: { id: driver.id }, data: { availabilityStatus: req.body.status } })
+
+    // Online-session log — feeds accurate earnings/hour (Phase 3 §7) and
+    // never runs while the driver is offline (Phase 3 §5).
+    if (req.body.status === "online") {
+      await prisma.driverOnlineSession.create({ data: { driverId: driver.id } })
+    } else {
+      const openSession = await prisma.driverOnlineSession.findFirst({
+        where: { driverId: driver.id, endedAt: null },
+        orderBy: { startedAt: "desc" },
+      })
+      if (openSession) {
+        await prisma.driverOnlineSession.update({ where: { id: openSession.id }, data: { endedAt: new Date() } })
+      }
+    }
+
     emitToAdmin("driver.availability_changed", { driverId: driver.id, status: updated.availabilityStatus })
     res.json({ driverProfile: updated })
   }),
@@ -37,10 +54,21 @@ driverRouter.patch(
   validateBody(z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) })),
   asyncHandler(async (req, res) => {
     const driver = await getDriverProfileOrThrow(req.auth!.userId)
+    // Only meaningful to broadcast while online or on a trip — an offline
+    // driver's position is never tracked (Phase 3 §5).
+    if (driver.availabilityStatus === "offline") {
+      throw ApiError.conflict("DRIVER_OFFLINE", "Go online before sending location updates.")
+    }
+    const prev = driver.lastLat != null && driver.lastLng != null && driver.lastLocationAt
+      ? { lat: driver.lastLat, lng: driver.lastLng, at: driver.lastLocationAt }
+      : null
+    const next = { lat: req.body.lat, lng: req.body.lng, at: new Date() }
+
     await prisma.driverProfile.update({
       where: { id: driver.id },
-      data: { lastLat: req.body.lat, lastLng: req.body.lng, lastLocationAt: new Date() },
+      data: { lastLat: next.lat, lastLng: next.lng, lastLocationAt: next.at },
     })
+    await checkImpossibleMovement({ driverUserId: req.auth!.userId, prev, next }).catch(() => {})
     res.status(204).send()
   }),
 )
@@ -163,32 +191,101 @@ driverRouter.get(
       return { totalRs: round2(total), rides: transactions.length, averageFareRs: transactions.length ? round2(total / transactions.length) : 0 }
     }
 
-    const [today, week, month] = await Promise.all([summarize(startOfToday()), summarize(startOfWeek()), summarize(startOfMonth())])
+    const [today, week, month, dailySeries, weeklySeries, monthlySeries, earningsPerHour] = await Promise.all([
+      summarize(startOfToday()),
+      summarize(startOfWeek()),
+      summarize(startOfMonth()),
+      buildSeries(wallet?.id, "day", 14),
+      buildSeries(wallet?.id, "week", 8),
+      buildSeries(wallet?.id, "month", 6),
+      computeEarningsPerHour(driver.id, wallet?.id),
+    ])
+
+    const totalRides = driver.completedRides + driver.cancelledRides
 
     res.json({
       walletBalanceRs: wallet?.balance ?? 0,
       today,
       week,
       month,
+      charts: { daily: dailySeries, weekly: weeklySeries, monthly: monthlySeries },
+      earningsPerHourRs: earningsPerHour,
       completedRides: driver.completedRides,
+      cancelledRides: driver.cancelledRides,
       acceptanceRate: driver.acceptanceRate,
+      cancellationRate: totalRides ? round2((driver.cancelledRides / totalRides) * 100) : 0,
       rating: driver.ratingAvg,
     })
   }),
 )
 
+/** Buckets ride_payout transactions into `count` trailing periods for chart rendering. */
+async function buildSeries(walletId: string | undefined, unit: "day" | "week" | "month", count: number) {
+  if (!walletId) return []
+  const stepMs = unit === "day" ? 86_400_000 : unit === "week" ? 7 * 86_400_000 : 30 * 86_400_000
+  const since = new Date(Date.now() - count * stepMs)
+  const transactions = await prisma.transaction.findMany({
+    where: { walletId, type: "ride_payout", createdAt: { gte: since } },
+    select: { amount: true, createdAt: true },
+  })
+
+  const buckets: { label: string; totalRs: number; rides: number }[] = []
+  for (let i = count - 1; i >= 0; i--) {
+    const bucketStart = new Date(Date.now() - (i + 1) * stepMs)
+    const bucketEnd = new Date(Date.now() - i * stepMs)
+    const inBucket = transactions.filter((t) => t.createdAt >= bucketStart && t.createdAt < bucketEnd)
+    buckets.push({
+      label: bucketStart.toISOString().slice(0, 10),
+      totalRs: round2(inBucket.reduce((sum, t) => sum + t.amount, 0)),
+      rides: inBucket.length,
+    })
+  }
+  return buckets
+}
+
+/** Real elapsed online time from DriverOnlineSession logs, not an approximation. */
+async function computeEarningsPerHour(driverId: string, walletId: string | undefined): Promise<number> {
+  const since = new Date(Date.now() - 30 * 86_400_000)
+  const [sessions, payoutAgg] = await Promise.all([
+    prisma.driverOnlineSession.findMany({ where: { driverId, startedAt: { gte: since } } }),
+    walletId
+      ? prisma.transaction.aggregate({ _sum: { amount: true }, where: { walletId, type: "ride_payout", createdAt: { gte: since } } })
+      : Promise.resolve({ _sum: { amount: 0 } }),
+  ])
+  const totalHours = sessions.reduce((sum, s) => sum + ((s.endedAt ?? new Date()).getTime() - s.startedAt.getTime()) / 3_600_000, 0)
+  if (totalHours < 0.1) return 0
+  return round2((payoutAgg._sum.amount ?? 0) / totalHours)
+}
+
 driverRouter.get(
   "/me/transactions",
   asyncHandler(async (req, res) => {
     const wallet = await prisma.wallet.findUnique({ where: { userId: req.auth!.userId } })
-    if (!wallet) return res.json({ transactions: [] })
-    const transactions = await prisma.transaction.findMany({
-      where: { walletId: wallet.id },
-      include: { payment: { include: { ride: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-    })
-    res.json({ transactions })
+    if (!wallet) return res.json({ transactions: [], total: 0 })
+
+    const { type, from, to, page = "1", pageSize = "30" } = req.query as Record<string, string>
+    const where = {
+      walletId: wallet.id,
+      ...(type ? { type } : {}),
+      ...(from || to ? { createdAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lte: new Date(to) } : {}) } } : {}),
+    }
+    const take = Math.min(100, Number(pageSize) || 30)
+    const skip = (Math.max(1, Number(page) || 1) - 1) * take
+
+    const [transactions, total] = await Promise.all([
+      prisma.transaction.findMany({ where, include: { payment: { include: { ride: true } } }, orderBy: { createdAt: "desc" }, take, skip }),
+      prisma.transaction.count({ where }),
+    ])
+    res.json({ transactions, total, page: Number(page) || 1, pageSize: take })
+  }),
+)
+
+driverRouter.get(
+  "/me/incentives",
+  asyncHandler(async (req, res) => {
+    const driver = await getDriverProfileOrThrow(req.auth!.userId)
+    const summary = await getDriverIncentiveSummary(driver.id)
+    res.json(summary)
   }),
 )
 

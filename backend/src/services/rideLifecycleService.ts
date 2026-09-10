@@ -5,6 +5,9 @@ import { resolveFareRule } from "./fareEngine.js"
 import { getPaymentProvider } from "./payments/index.js"
 import { notify } from "./notifications/NotificationService.js"
 import { emitToRide, emitToUser, emitToAdmin } from "../realtime/socket.js"
+import { recordDriverRideForIncentives } from "./incentiveService.js"
+import { qualifyReferralOnFirstRide } from "./referralService.js"
+import { checkCancellationRiskSignal } from "./riskService.js"
 
 async function loadRideWithParties(rideId: string) {
   const ride = await prisma.ride.findUnique({
@@ -113,6 +116,9 @@ export async function updateRideStatus(params: {
     })
     if (params.actorRole === "passenger") {
       await prisma.passengerProfile.update({ where: { id: ride.passengerId }, data: { cancelledRides: { increment: 1 } } })
+      await checkCancellationRiskSignal(ride.passenger.userId, "passenger")
+    } else {
+      await checkCancellationRiskSignal(ride.driver.userId, "driver")
     }
   }
 
@@ -171,18 +177,24 @@ function rideStatusTitle(status: RideStatus): string {
 async function completeRide(rideId: string) {
   const ride = await prisma.ride.findUniqueOrThrow({
     where: { id: rideId },
-    include: { rideRequest: true, driver: { include: { user: true, city: true } } },
+    include: { rideRequest: true, driver: { include: { user: true, city: true } }, passenger: { include: { user: true } } },
   })
 
   const rule = await resolveFareRule(ride.rideRequest.cityId, ride.rideRequest.vehicleTypeId, ride.rideRequest.zoneId)
   const finalFare = ride.agreedFare // MVP: the agreed/negotiated price is final — see docs for rationale
-  const commissionAmount = round2(finalFare * rule.commissionRate)
+  // Commission Engine (Phase 3 §26): percentage + optional flat fee, both
+  // admin-configurable per city/vehicle-type — never hard-coded here.
+  const commissionAmount = round2(finalFare * rule.commissionRate + rule.commissionFlatFee)
+  // A promo discount reduces what the passenger is charged; the platform
+  // absorbs it as a marketing cost rather than reducing the driver's
+  // payout, so driverPayout is computed off the full fare regardless.
+  const discountAmount = round2(ride.rideRequest.discountAmount ?? 0)
   const driverPayout = round2(finalFare - commissionAmount)
   const durationMin =
     ride.startedAt && ride.completedAt ? Math.max(1, Math.round((ride.completedAt.getTime() - ride.startedAt.getTime()) / 60_000)) : null
 
   const provider = getPaymentProvider(ride.paymentMethod)
-  const authResult = await provider.authorize(finalFare, ride.id)
+  const authResult = await provider.authorize(finalFare - discountAmount, ride.id)
   const captureResult = await provider.capture(authResult.providerReference)
 
   await prisma.$transaction(async (tx) => {
@@ -191,14 +203,22 @@ async function completeRide(rideId: string) {
     const payment = await tx.payment.create({
       data: {
         rideId: ride.id,
+        promotionId: ride.rideRequest.promotionId,
         method: ride.paymentMethod,
         status: captureResult.status === "captured" ? "captured" : "failed",
         amount: finalFare,
+        discountAmount,
         currencyCode: ride.driver.city.currencyCode,
         providerReference: captureResult.providerReference,
         capturedAt: captureResult.status === "captured" ? new Date() : null,
       },
     })
+
+    if (captureResult.status !== "captured") {
+      await tx.riskEvent.create({
+        data: { userId: ride.passenger.userId, type: "payment_failure", severity: "medium", details: JSON.stringify({ rideId: ride.id }) },
+      })
+    }
 
     await tx.commission.create({ data: { paymentId: payment.id, rate: rule.commissionRate, amount: commissionAmount } })
 
@@ -226,6 +246,14 @@ async function completeRide(rideId: string) {
     })
     await tx.passengerProfile.update({ where: { id: ride.passengerId }, data: { completedRides: { increment: 1 } } })
   })
+
+  // Post-completion hooks — each is independently best-effort so a failure
+  // in one (e.g. no active incentive campaign) never blocks the ride from
+  // being marked complete, which already committed above.
+  await Promise.all([
+    recordDriverRideForIncentives(ride.driverId, ride.rideRequest.cityId, ride.rideRequest.vehicleTypeId),
+    qualifyReferralOnFirstRide(ride.passenger.userId),
+  ])
 
   return { finalFare, commissionAmount, driverPayout }
 }

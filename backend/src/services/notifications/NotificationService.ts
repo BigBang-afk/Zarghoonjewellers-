@@ -22,7 +22,17 @@ export interface NotifyInput {
  * services/notifications/ConsoleProviders.ts and .env.example for what a
  * production swap needs.
  */
+/** Safety and account/system notifications can never be silently disabled (Phase 2 §20). */
+const NON_DISABLEABLE_TYPES: NotificationType[] = ["safety", "system"]
+
 export async function notify(input: NotifyInput) {
+  if (!NON_DISABLEABLE_TYPES.includes(input.type)) {
+    const preference = await prisma.notificationPreference.findUnique({
+      where: { userId_type: { userId: input.userId, type: input.type } },
+    })
+    if (preference && !preference.enabled) return null
+  }
+
   const notification = await prisma.notification.create({
     data: {
       userId: input.userId,

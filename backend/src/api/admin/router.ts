@@ -7,6 +7,7 @@ import { adminFinanceRouter } from "./finance.js"
 import { adminTrustRouter } from "./trust.js"
 import { adminConfigRouter } from "./config.js"
 import { adminSystemRouter } from "./system.js"
+import { adminBusinessRouter } from "./business.js"
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireRole("admin"))
@@ -18,3 +19,4 @@ adminRouter.use(adminFinanceRouter)
 adminRouter.use(adminTrustRouter)
 adminRouter.use(adminConfigRouter)
 adminRouter.use(adminSystemRouter)
+adminRouter.use(adminBusinessRouter)

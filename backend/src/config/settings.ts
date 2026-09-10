@@ -24,6 +24,35 @@ export interface PlatformSettingsShape {
   "fare.defaultCommissionRate": number
   "fare.demandMultiplierMin": number
   "fare.demandMultiplierMax": number
+  "fare.rangeSpreadPct": number
+
+  // Phase 3 — smart matching weights (must sum to ~1.0; not enforced, just documented)
+  "matching.weightEta": number
+  "matching.weightAcceptance": number
+  "matching.weightRating": number
+  "matching.weightFairness": number
+  "matching.locationStalenessMinutes": number
+  "matching.favoriteDriverBoost": number
+
+  // Phase 3 — negotiation guardrails
+  "negotiation.maxCounterRounds": number
+  "negotiation.maxCounterDeviationPct": number
+
+  // Phase 3 — referrals
+  "referral.rewardAmountReferrer": number
+  "referral.rewardAmountReferred": number
+  "referral.qualifyingRideCount": number
+
+  // Phase 3 — verification / documents
+  "verification.documentExpiryWarningDays": number
+
+  // Phase 3 — risk signals
+  "risk.cancellationRateThresholdPct": number
+  "risk.minRidesForCancellationCheck": number
+  "risk.impossibleSpeedKmh": number
+
+  // Phase 3 — scheduled rides
+  "scheduledRide.dispatchLeadMinutes": number
 }
 
 const DEFAULTS: PlatformSettingsShape = {
@@ -38,6 +67,29 @@ const DEFAULTS: PlatformSettingsShape = {
   "fare.defaultCommissionRate": 0.15,
   "fare.demandMultiplierMin": 1.0,
   "fare.demandMultiplierMax": 2.5,
+  "fare.rangeSpreadPct": 0.12,
+
+  "matching.weightEta": 0.4,
+  "matching.weightAcceptance": 0.25,
+  "matching.weightRating": 0.25,
+  "matching.weightFairness": 0.1,
+  "matching.locationStalenessMinutes": 10,
+  "matching.favoriteDriverBoost": 25,
+
+  "negotiation.maxCounterRounds": 2,
+  "negotiation.maxCounterDeviationPct": 0.3,
+
+  "referral.rewardAmountReferrer": 200,
+  "referral.rewardAmountReferred": 100,
+  "referral.qualifyingRideCount": 1,
+
+  "verification.documentExpiryWarningDays": 30,
+
+  "risk.cancellationRateThresholdPct": 30,
+  "risk.minRidesForCancellationCheck": 5,
+  "risk.impossibleSpeedKmh": 150,
+
+  "scheduledRide.dispatchLeadMinutes": 15,
 }
 
 const CACHE_TTL_MS = 5_000

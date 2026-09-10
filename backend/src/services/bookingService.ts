@@ -97,6 +97,7 @@ export async function selectOffer(params: {
         agreedFare,
         distanceKm: offer!.distanceKm,
         paymentMethod: request.paymentMethod,
+        businessAccountId: request.businessAccountId,
         status: "driver_selected",
         shareToken: randomUUID(),
         statusHistory: { create: { status: "driver_selected", changedById: passenger.userId, note: "Ride booked" } },
