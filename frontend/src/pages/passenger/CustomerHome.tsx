@@ -23,6 +23,7 @@ import { passengerApi, type RecentPlace, type SavedPlace } from "../../api/passe
 import { ridesApi, type Place } from "../../api/rides"
 import { useAuth } from "../../auth/AuthContext"
 import { useToast, errorMessage } from "../../shared/Toast"
+import { useT } from "../../i18n"
 import { ISLAMABAD_CURRENT_LOCATION_FALLBACK, POPULAR_ISLAMABAD_PLACES } from "../../shared/islamabadPlaces"
 import type { City, FareEstimate, VehicleType } from "../../types"
 import { SearchingPanel } from "./SearchingPanel"
@@ -36,6 +37,7 @@ type View = "home" | "searching" | "offers" | "live" | "rating" | "wallet"
 export function CustomerHome() {
   const { user } = useAuth()
   const { push } = useToast()
+  const t = useT()
 
   const [loadingRefData, setLoadingRefData] = useState(true)
   const [city, setCity] = useState<City | null>(null)
@@ -373,10 +375,10 @@ export function CustomerHome() {
 
               <div className="absolute inset-x-0 bottom-0 flex items-center justify-around border-t border-ink-900/[0.06] bg-white/95 py-3 backdrop-blur">
                 {[
-                  { icon: HomeIcon, label: "Home", active: true, onClick: () => {} },
-                  { icon: Clock, label: "Activity", onClick: () => {} },
-                  { icon: Wallet, label: "Wallet", onClick: () => setView("wallet") },
-                  { icon: User, label: "Profile", onClick: () => {} },
+                  { icon: HomeIcon, label: t("nav.home"), active: true, onClick: () => {} },
+                  { icon: Clock, label: t("nav.activity"), onClick: () => {} },
+                  { icon: Wallet, label: t("nav.wallet"), onClick: () => setView("wallet") },
+                  { icon: User, label: t("nav.profile"), onClick: () => {} },
                 ].map((t) => (
                   <button key={t.label} onClick={t.onClick} className={`flex flex-col items-center gap-0.5 ${t.active ? "text-rivo-600" : "text-ink-700/50"}`}>
                     <t.icon className="h-5 w-5" />

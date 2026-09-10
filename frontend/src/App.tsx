@@ -10,6 +10,7 @@ import { Logo } from "./components/Logo"
 import { AuthProvider, useAuth } from "./auth/AuthContext"
 import { ProtectedRoute } from "./auth/ProtectedRoute"
 import { ToastProvider } from "./shared/Toast"
+import { LocaleProvider } from "./i18n"
 
 const previewLinks = [
   { to: "/", label: "Landing" },
@@ -98,12 +99,14 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AuthProvider>
-        <Router>
-          <AppRoutes />
-        </Router>
-      </AuthProvider>
-    </ToastProvider>
+    <LocaleProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <Router>
+            <AppRoutes />
+          </Router>
+        </AuthProvider>
+      </ToastProvider>
+    </LocaleProvider>
   )
 }

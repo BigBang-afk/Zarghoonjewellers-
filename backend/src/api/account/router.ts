@@ -78,3 +78,18 @@ accountRouter.put(
     res.json({ preference: pref })
   }),
 )
+
+// ---------------------------------------------------------------------
+// Locale (Phase 4 §2) — "en"/"ur" ship with real translations today;
+// any other BCP-47-ish code is accepted so a future language only needs
+// dictionary + NotificationTemplate rows, never a backend code change.
+// ---------------------------------------------------------------------
+
+accountRouter.patch(
+  "/locale",
+  validateBody(z.object({ locale: z.string().trim().min(2).max(10) })),
+  asyncHandler(async (req, res) => {
+    const user = await prisma.user.update({ where: { id: req.auth!.userId }, data: { locale: req.body.locale } })
+    res.json({ locale: user.locale })
+  }),
+)

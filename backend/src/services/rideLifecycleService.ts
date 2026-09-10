@@ -3,7 +3,7 @@ import { ApiError } from "../utils/apiError.js"
 import { RIDE_STATUS_TRANSITIONS, type RideStatus } from "../types/enums.js"
 import { resolveFareRule } from "./fareEngine.js"
 import { getPaymentProvider } from "./payments/index.js"
-import { notify } from "./notifications/NotificationService.js"
+import { notify, notifyFromTemplate } from "./notifications/NotificationService.js"
 import { emitToRide, emitToUser, emitToAdmin } from "../realtime/socket.js"
 import { recordDriverRideForIncentives } from "./incentiveService.js"
 import { qualifyReferralOnFirstRide } from "./referralService.js"
@@ -127,13 +127,7 @@ export async function updateRideStatus(params: {
   }
 
   const counterpartUserId = params.actorRole === "passenger" ? ride.driver.userId : ride.passenger.userId
-  await notify({
-    userId: counterpartUserId,
-    type: "ride_update",
-    title: rideStatusTitle(params.target),
-    body: params.reason,
-    data: { rideId: ride.id, status: params.target },
-  })
+  await sendRideStatusNotification(ride, params.target, counterpartUserId, params.reason)
   emitToRide(ride.id, "ride.status_changed", { rideId: ride.id, status: params.target })
   emitToAdmin("ride.status_changed", { rideId: ride.id, status: params.target })
 
@@ -153,19 +147,52 @@ export async function updateRideStatus(params: {
   })
 }
 
-function rideStatusTitle(status: RideStatus): string {
-  const titles: Record<RideStatus, string> = {
-    driver_selected: "Driver selected",
-    driver_arriving: "Driver is on the way",
-    driver_arrived: "Driver has arrived",
-    ride_started: "Ride started",
-    ride_completed: "Ride completed",
-    cancelled_by_passenger: "Ride cancelled by passenger",
-    cancelled_by_driver: "Ride cancelled by driver",
-    expired: "Ride expired",
-    disputed: "Ride disputed",
+/**
+ * Locale-aware, per-status notification (Phase 4 §2/§19) — the
+ * counterpart always sees clear, current-locale text about where things
+ * stand, sourced from the admin-editable template set rather than an
+ * English string baked into this function.
+ */
+async function sendRideStatusNotification(
+  ride: Awaited<ReturnType<typeof loadRideWithParties>>,
+  target: RideStatus,
+  recipientUserId: string,
+  reason?: string,
+) {
+  const templateKeyByStatus: Partial<Record<RideStatus, string>> = {
+    driver_arriving: "ride.driver_arriving",
+    driver_arrived: "ride.driver_arrived",
+    ride_started: "ride.started",
+    ride_completed: "ride.completed",
+    cancelled_by_passenger: "ride.cancelled_by_passenger",
+    cancelled_by_driver: "ride.cancelled_by_driver",
   }
-  return titles[status]
+  const templateKey = templateKeyByStatus[target]
+  if (!templateKey) {
+    // expired/disputed — rare, system-driven transitions without a
+    // dedicated template yet; a plain fallback keeps the app informative.
+    await notify({ userId: recipientUserId, type: "ride_update", title: `Ride ${target.replace(/_/g, " ")}`, body: reason, data: { rideId: ride.id, status: target } })
+    return
+  }
+
+  let destination = ""
+  if (target === "ride_started") {
+    const loc = await prisma.location.findUnique({ where: { id: ride.destinationLocationId } })
+    destination = loc?.address ?? "your destination"
+  }
+
+  await notifyFromTemplate({
+    userId: recipientUserId,
+    templateKey,
+    type: "ride_update",
+    vars: {
+      driverName: ride.driver.user.fullName,
+      destination,
+      fare: ride.agreedFare,
+      reason: reason ?? "",
+    },
+    data: { rideId: ride.id, status: target },
+  })
 }
 
 /**

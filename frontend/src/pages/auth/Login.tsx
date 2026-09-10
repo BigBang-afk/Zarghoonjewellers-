@@ -7,6 +7,10 @@ import { Button } from "../../components/ui/Button"
 import { Input } from "../../components/ui/Input"
 import { useAuth } from "../../auth/AuthContext"
 import { useToast, errorMessage } from "../../shared/Toast"
+import { useLocale, SUPPORTED_LOCALES } from "../../i18n"
+import { accountApi } from "../../api/account"
+
+const LOCALE_LABELS: Record<string, string> = { en: "English", ur: "اردو" }
 
 const DEMO_ACCOUNTS = [
   { label: "Passenger", phone: "+923001000001", password: "Passenger123!" },
@@ -22,12 +26,14 @@ export function Login() {
   const { push } = useToast()
   const navigate = useNavigate()
   const location = useLocation() as { state?: { from?: string } }
+  const { locale, setLocale, t } = useLocale()
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSubmitting(true)
     try {
       const user = await login(phone, password)
+      accountApi.setLocale(locale).catch(() => {})
       const dest = location.state?.from ?? (user.role === "passenger" ? "/app" : user.role === "driver" ? "/driver" : "/admin")
       navigate(dest, { replace: true })
     } catch (err) {
@@ -44,14 +50,28 @@ export function Login() {
           <Logo />
         </div>
         <Card className="p-6">
-          <h1 className="font-display text-xl font-bold">Log in</h1>
-          <p className="mt-1 text-sm text-ink-700/60">Works for passengers, drivers, and admins.</p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="font-display text-xl font-bold">{t("auth.login")}</h1>
+              <p className="mt-1 text-sm text-ink-700/60">Works for passengers, drivers, and admins.</p>
+            </div>
+            <select
+              aria-label={t("auth.language")}
+              value={locale}
+              onChange={(e) => setLocale(e.target.value)}
+              className="shrink-0 rounded-lg border border-ink-900/10 bg-white px-2 py-1.5 text-xs font-semibold"
+            >
+              {SUPPORTED_LOCALES.map((l) => (
+                <option key={l} value={l}>{LOCALE_LABELS[l] ?? l}</option>
+              ))}
+            </select>
+          </div>
 
           <form onSubmit={onSubmit} className="mt-5 space-y-4">
-            <Input label="Phone number" name="phone" type="tel" icon={<Phone className="h-4 w-4" />} placeholder="+923001234567" value={phone} onChange={(e) => setPhone(e.target.value)} required />
-            <Input label="Password" name="password" type="password" icon={<Lock className="h-4 w-4" />} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <Input label={t("auth.phone")} name="phone" type="tel" icon={<Phone className="h-4 w-4" />} placeholder="+923001234567" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+            <Input label={t("auth.password")} name="password" type="password" icon={<Lock className="h-4 w-4" />} placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
             <Button type="submit" fullWidth size="lg" disabled={submitting}>
-              {submitting ? "Logging in…" : "Log in"}
+              {submitting ? "Logging in…" : t("auth.loginButton")}
             </Button>
           </form>
 

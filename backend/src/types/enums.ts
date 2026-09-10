@@ -98,7 +98,17 @@ export type SafetyEventType = (typeof SafetyEventType)[number]
 export const SafetySeverity = ["low", "medium", "high", "critical"] as const
 export type SafetySeverity = (typeof SafetySeverity)[number]
 
-export const AdminRole = ["super_admin", "ops_manager", "support_agent", "finance", "safety_officer", "read_only"] as const
+export const AdminRole = [
+  "super_admin",
+  "ops_manager",
+  "support_agent",
+  "finance",
+  "safety_officer",
+  "read_only",
+  // Phase 4 §24
+  "city_admin",
+  "marketing",
+] as const
 export type AdminRole = (typeof AdminRole)[number]
 
 export const VehicleStatus = ["pending", "active", "inactive", "rejected"] as const

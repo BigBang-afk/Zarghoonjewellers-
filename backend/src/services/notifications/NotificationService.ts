@@ -1,6 +1,7 @@
 import { prisma } from "../../utils/prisma.js"
 import { emitToUser } from "../../realtime/socket.js"
 import { consoleEmailProvider, consolePushProvider, consoleSmsProvider } from "./ConsoleProviders.js"
+import { renderTemplate } from "./templates.js"
 import type { NotificationType } from "../../types/enums.js"
 
 export interface NotifyInput {
@@ -60,6 +61,34 @@ export async function notify(input: NotifyInput) {
   }
 
   return notification
+}
+
+/**
+ * Locale-aware notification (Phase 4 §2/§19) — resolves the recipient's
+ * `User.locale`, renders the admin-editable (or in-code default) template
+ * for `templateKey`, and sends it through the same real `notify()` path
+ * above (preferences, socket push, DB row — all unchanged).
+ */
+export async function notifyFromTemplate(input: {
+  userId: string
+  templateKey: string
+  vars?: Record<string, string | number>
+  type: NotificationType
+  data?: Record<string, unknown>
+  external?: boolean
+  toPhone?: string
+}) {
+  const user = await prisma.user.findUnique({ where: { id: input.userId }, select: { locale: true } })
+  const rendered = await renderTemplate(input.templateKey, user?.locale ?? "en", input.vars ?? {})
+  return notify({
+    userId: input.userId,
+    type: input.type,
+    title: rendered.title,
+    body: rendered.body,
+    data: input.data,
+    external: input.external,
+    toPhone: input.toPhone,
+  })
 }
 
 export const emailProvider = consoleEmailProvider
