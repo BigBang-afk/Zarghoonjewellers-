@@ -11,6 +11,7 @@ import { adminBusinessRouter } from "./business.js"
 import { adminRiskRouter } from "./risk.js"
 import { adminAnalyticsRouter } from "./analytics.js"
 import { adminNotificationTemplateRouter } from "./notificationTemplates.js"
+import { adminMarketingRouter } from "./marketing.js"
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireRole("admin"))
@@ -26,3 +27,4 @@ adminRouter.use(adminBusinessRouter)
 adminRouter.use(adminRiskRouter)
 adminRouter.use(adminAnalyticsRouter)
 adminRouter.use(adminNotificationTemplateRouter)
+adminRouter.use(adminMarketingRouter)

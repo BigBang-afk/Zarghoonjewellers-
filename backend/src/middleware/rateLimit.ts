@@ -34,3 +34,13 @@ export const generalRateLimit = rateLimit({
   legacyHeaders: false,
   skip,
 })
+
+/** No-auth public form (waitlist) — prevents scripted bulk submission. */
+export const publicFormRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip,
+  message: { error: { code: "RATE_LIMITED", message: "Too many submissions. Try again later." } },
+})

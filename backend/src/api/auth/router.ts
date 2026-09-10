@@ -24,32 +24,45 @@ authRouter.use(authRateLimit)
 
 const phoneSchema = z.string().trim().regex(/^\+?[0-9]{7,15}$/, "Enter a valid phone number")
 
-const registerPassengerSchema = z.object({
-  fullName: z.string().trim().min(2).max(80),
-  phone: phoneSchema,
-  email: z.string().trim().email().optional(),
-  password: z.string().min(8).max(72),
-  photoUrl: z.string().url().optional(),
-  referredByCode: z.string().trim().max(20).optional(),
+// Attribution (Phase 4 §17) — self-reported by the client at signup (deep
+// link / campaign landing page / app-store referrer), never inferred or
+// guessed server-side.
+const acquisitionSchema = z.object({
+  acquisitionSource: z.enum(["organic", "referral", "social", "campaign", "partner", "other"]).optional(),
+  acquisitionCampaign: z.string().trim().max(60).optional(),
+  marketingOptIn: z.boolean().optional(),
 })
 
-const registerDriverSchema = z.object({
-  fullName: z.string().trim().min(2).max(80),
-  phone: phoneSchema,
-  email: z.string().trim().email(),
-  password: z.string().min(8).max(72),
-  photoUrl: z.string().url().optional(),
-  cityId: z.string().uuid(),
-  vehicle: z.object({
-    vehicleTypeCode: z.enum(["bike", "rickshaw", "economy", "standard", "premium"]),
-    make: z.string().trim().min(1).max(40),
-    model: z.string().trim().min(1).max(40),
-    year: z.number().int().min(1990).max(new Date().getFullYear() + 1).optional(),
-    color: z.string().trim().max(30).optional(),
-    plateNumber: z.string().trim().min(3).max(20),
-  }),
-  referredByCode: z.string().trim().max(20).optional(),
-})
+const registerPassengerSchema = z
+  .object({
+    fullName: z.string().trim().min(2).max(80),
+    phone: phoneSchema,
+    email: z.string().trim().email().optional(),
+    password: z.string().min(8).max(72),
+    photoUrl: z.string().url().optional(),
+    referredByCode: z.string().trim().max(20).optional(),
+  })
+  .merge(acquisitionSchema)
+
+const registerDriverSchema = z
+  .object({
+    fullName: z.string().trim().min(2).max(80),
+    phone: phoneSchema,
+    email: z.string().trim().email(),
+    password: z.string().min(8).max(72),
+    photoUrl: z.string().url().optional(),
+    cityId: z.string().uuid(),
+    vehicle: z.object({
+      vehicleTypeCode: z.enum(["bike", "rickshaw", "economy", "standard", "premium"]),
+      make: z.string().trim().min(1).max(40),
+      model: z.string().trim().min(1).max(40),
+      year: z.number().int().min(1990).max(new Date().getFullYear() + 1).optional(),
+      color: z.string().trim().max(30).optional(),
+      plateNumber: z.string().trim().min(3).max(20),
+    }),
+    referredByCode: z.string().trim().max(20).optional(),
+  })
+  .merge(acquisitionSchema)
 
 const loginSchema = z.object({ phone: phoneSchema, password: z.string().min(1) })
 const otpRequestSchema = z.object({
@@ -89,7 +102,7 @@ authRouter.post(
   "/register/passenger",
   validateBody(registerPassengerSchema),
   asyncHandler(async (req, res) => {
-    const { fullName, phone, email, password, photoUrl, referredByCode } = req.body
+    const { fullName, phone, email, password, photoUrl, referredByCode, acquisitionSource, acquisitionCampaign, marketingOptIn } = req.body
 
     const existing = await prisma.user.findUnique({ where: { phone } })
     if (existing) throw ApiError.conflict("PHONE_ALREADY_REGISTERED", "An account with this phone number already exists.")
@@ -105,6 +118,9 @@ authRouter.post(
         photoUrl,
         role: "passenger",
         status: "pending_verification",
+        acquisitionSource,
+        acquisitionCampaign,
+        ...(marketingOptIn != null ? { marketingOptIn } : {}),
         passengerProfile: { create: {} },
         wallet: { create: { balance: 0, currencyCode } },
       },
@@ -131,7 +147,7 @@ authRouter.post(
   "/register/driver",
   validateBody(registerDriverSchema),
   asyncHandler(async (req, res) => {
-    const { fullName, phone, email, password, photoUrl, cityId, vehicle, referredByCode } = req.body
+    const { fullName, phone, email, password, photoUrl, cityId, vehicle, referredByCode, acquisitionSource, acquisitionCampaign, marketingOptIn } = req.body
 
     const existing = await prisma.user.findUnique({ where: { phone } })
     if (existing) throw ApiError.conflict("PHONE_ALREADY_REGISTERED", "An account with this phone number already exists.")
@@ -156,6 +172,9 @@ authRouter.post(
         role: "driver",
         status: "pending_verification",
         primaryCityId: cityId,
+        acquisitionSource,
+        acquisitionCampaign,
+        ...(marketingOptIn != null ? { marketingOptIn } : {}),
         wallet: { create: { balance: 0, currencyCode: city.currencyCode } },
         driverProfile: {
           create: {

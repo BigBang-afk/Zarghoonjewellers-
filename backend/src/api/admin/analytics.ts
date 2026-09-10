@@ -101,6 +101,85 @@ adminAnalyticsRouter.get(
 )
 
 // ---------------------------------------------------------------------
+// Customer acquisition tracking (Phase 4 §17) — grouped by the
+// self-reported acquisitionSource/acquisitionCampaign captured at
+// registration. CPA needs real ad-spend data we don't store anywhere, so
+// rather than fabricate a number, `spendRs` is an optional query param:
+// when supplied it's divided by that source's signup count to produce a
+// CPA figure computed from an admin-supplied input, not invented data.
+// ---------------------------------------------------------------------
+
+adminAnalyticsRouter.get(
+  "/analytics/acquisition",
+  asyncHandler(async (req, res) => {
+    const cityId = req.query.cityId as string | undefined
+    const spendRs = req.query.spendRs ? Number(req.query.spendRs) : undefined
+    const where = cityId ? { primaryCityId: cityId } : {}
+
+    const users = await prisma.user.findMany({
+      where,
+      select: { id: true, role: true, acquisitionSource: true, acquisitionCampaign: true, createdAt: true },
+    })
+    if (users.length === 0) return res.json({ bySource: [], byCampaign: [] })
+
+    const [passengerRides, driverRides] = await Promise.all([
+      prisma.ride.findMany({
+        where: { status: "ride_completed", passenger: { userId: { in: users.map((u) => u.id) } } },
+        select: { createdAt: true, passenger: { select: { userId: true } } },
+      }),
+      prisma.ride.findMany({
+        where: { status: "ride_completed", driver: { userId: { in: users.map((u) => u.id) } } },
+        select: { createdAt: true, driver: { select: { userId: true } } },
+      }),
+    ])
+
+    const ridesByUser = new Map<string, Date[]>()
+    for (const r of passengerRides) {
+      const userId = r.passenger.userId
+      if (!ridesByUser.has(userId)) ridesByUser.set(userId, [])
+      ridesByUser.get(userId)!.push(r.createdAt)
+    }
+    for (const r of driverRides) {
+      const userId = r.driver.userId
+      if (!ridesByUser.has(userId)) ridesByUser.set(userId, [])
+      ridesByUser.get(userId)!.push(r.createdAt)
+    }
+
+    type Bucket = { signups: number; firstRide: number; repeatRide: number; retained30d: number }
+    function summarize(groupBy: (u: (typeof users)[number]) => string) {
+      const buckets = new Map<string, Bucket>()
+      for (const u of users) {
+        const key = groupBy(u)
+        const bucket = buckets.get(key) ?? { signups: 0, firstRide: 0, repeatRide: 0, retained30d: 0 }
+        bucket.signups++
+        const rides = ridesByUser.get(u.id) ?? []
+        if (rides.length >= 1) bucket.firstRide++
+        if (rides.length >= 2) bucket.repeatRide++
+        // Retained: has a completed ride 7+ days after signup (still riding, not a one-and-done).
+        if (rides.some((d) => d.getTime() >= u.createdAt.getTime() + 7 * 86_400_000)) bucket.retained30d++
+        buckets.set(key, bucket)
+      }
+      return [...buckets.entries()]
+        .sort((a, b) => b[1].signups - a[1].signups)
+        .map(([key, b]) => ({
+          key,
+          signups: b.signups,
+          firstRideRatePct: round2((b.firstRide / b.signups) * 100),
+          repeatRideRatePct: round2((b.repeatRide / b.signups) * 100),
+          retainedPct: round2((b.retained30d / b.signups) * 100),
+          cpaRs: spendRs != null && b.signups > 0 ? round2(spendRs / b.signups) : null,
+        }))
+    }
+
+    res.json({
+      bySource: summarize((u) => u.acquisitionSource ?? "unknown"),
+      byCampaign: summarize((u) => u.acquisitionCampaign ?? "(none)"),
+      spendRsSupplied: spendRs ?? null,
+    })
+  }),
+)
+
+// ---------------------------------------------------------------------
 // Cohort / retention analytics (Phase 3 §24) — weekly registration
 // cohorts for both roles. "Returned" is defined as having at least one
 // completed ride within the window measured from registration, which is

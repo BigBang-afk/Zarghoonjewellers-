@@ -268,6 +268,18 @@ adminConfigRouter.put(
 const promotionSchema = z.object({
   code: z.string().trim().min(3).max(20).transform((s) => s.toUpperCase()),
   description: z.string().trim().max(200).optional(),
+  campaignType: z
+    .enum([
+      "new_user",
+      "first_ride",
+      "weekend",
+      "airport",
+      "city_launch",
+      "referral",
+      "driver_acquisition",
+      "business_promotion",
+    ])
+    .optional(),
   discountType: z.enum(["percentage", "flat"]),
   discountValue: z.number().positive(),
   maxDiscount: z.number().positive().optional(),
