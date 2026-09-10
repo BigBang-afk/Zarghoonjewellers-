@@ -16,6 +16,7 @@ import { getSetting } from "../../config/settings.js"
 import { recordFailure } from "../../services/observability.js"
 import { paymentRateLimit } from "../../middleware/rateLimit.js"
 import { roundMoney } from "../../utils/money.js"
+import { computeDemandGrid } from "../../services/demandMapService.js"
 
 export const driverRouter = Router()
 driverRouter.use(requireAuth, requireRole("driver"))
@@ -140,6 +141,30 @@ driverRouter.get(
         expiresAt: o.expiresAt,
         passenger: { name: o.rideRequest.passenger.user.fullName, rating: o.rideRequest.passenger.ratingAvg },
       })),
+    })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Generalized demand heat map (Phase 5 §12) — reuses the same grid
+// computation as the admin demand-map, but scoped to the driver's own
+// city only (never an arbitrary cityId a driver could pass in) and
+// stripped down to just a coarse status per area. Never exposes raw
+// open-request counts or pickup coordinates precise enough to infer an
+// individual passenger's location, and never nudges a driver toward a
+// specific cell — it's the same read-only visibility the admin
+// dashboard gets, not a dispatch instruction.
+// ---------------------------------------------------------------------
+
+driverRouter.get(
+  "/me/demand-map",
+  asyncHandler(async (req, res) => {
+    const driver = await getDriverProfileOrThrow(req.auth!.userId)
+    const range = (req.query.range as string) || "lastHour"
+    const grid = await computeDemandGrid({ cityId: driver.cityId, range, gridSize: 4 })
+    res.json({
+      range: grid.range,
+      cells: grid.cells.map((c) => ({ centerLat: c.centerLat, centerLng: c.centerLng, status: c.status })),
     })
   }),
 )

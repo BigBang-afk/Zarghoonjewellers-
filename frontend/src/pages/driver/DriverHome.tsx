@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Banknote, Bell, Clock, Navigation, Power, Route, Star, TrendingUp, User, Wallet, X } from "lucide-react"
+import { Banknote, Bell, Clock, Flame, Navigation, Power, Route, Star, TrendingUp, User, Wallet, X } from "lucide-react"
 import { MapCanvas, MapPin as Pin, CarMarker } from "../../components/ui/MapCanvas"
 import { Card } from "../../components/ui/Card"
 import { Button } from "../../components/ui/Button"
@@ -41,6 +41,7 @@ export function DriverHome() {
 
   const [activeRideId, setActiveRideId] = useState<string | null>(null)
   const [justCompleted, setJustCompleted] = useState<{ rideId: string; passengerName: string } | null>(null)
+  const [demandStatus, setDemandStatus] = useState<"green" | "yellow" | "red" | null>(null)
 
   const locationTimer = useRef<number | null>(null)
 
@@ -160,6 +161,32 @@ export function DriverHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
 
+  useEffect(() => {
+    if (!online) {
+      setDemandStatus(null)
+      return
+    }
+    // Generalized demand signal only — a coarse worst-case status across
+    // a handful of areas near the driver's city, never a precise map or
+    // an instruction on where to go (Phase 5 §12).
+    function loadDemand() {
+      driverApi
+        .demandMap()
+        .then((r) => {
+          const worst = r.cells.reduce<"green" | "yellow" | "red" | null>((acc, c) => {
+            if (c.status === "red" || acc === "red") return "red"
+            if (c.status === "yellow" || acc === "yellow") return "yellow"
+            return acc ?? "green"
+          }, null)
+          setDemandStatus(worst)
+        })
+        .catch(() => {})
+    }
+    loadDemand()
+    const interval = window.setInterval(loadDemand, 60_000)
+    return () => window.clearInterval(interval)
+  }, [online])
+
   async function toggleOnline() {
     const next = !online
     setBusy(true)
@@ -263,6 +290,16 @@ export function DriverHome() {
                     </div>
                   </div>
                 </div>
+                {demandStatus && (
+                  <div
+                    className={`flex items-center gap-1.5 rounded-full py-1.5 pl-2 pr-3 text-[11px] font-bold text-white shadow-rivo-sm ${
+                      demandStatus === "red" ? "bg-danger-500" : demandStatus === "yellow" ? "bg-warning-500" : "bg-success-500"
+                    }`}
+                  >
+                    <Flame className="h-3.5 w-3.5" />
+                    {demandStatus === "red" ? "High demand nearby" : demandStatus === "yellow" ? "Moderate demand" : "Quiet right now"}
+                  </div>
+                )}
                 <button className="flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow-rivo-sm">
                   <Bell className="h-4 w-4" />
                 </button>

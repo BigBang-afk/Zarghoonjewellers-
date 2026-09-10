@@ -17,4 +17,9 @@ export const driverApi = {
   transactions: () => api.get<{ transactions: unknown[] }>("/driver/me/transactions"),
   rideHistory: () => api.get<{ rides: unknown[] }>("/driver/ride-history"),
   incentives: () => api.get<DriverIncentiveSummary>("/driver/me/incentives"),
+  demandMap: (range?: string) =>
+    api.get<{ range: string; cells: { centerLat: number; centerLng: number; status: "green" | "yellow" | "red" }[] }>(
+      "/driver/me/demand-map",
+      range ? { range } : undefined,
+    ),
 }
