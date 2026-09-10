@@ -50,7 +50,7 @@ adminRiskRouter.get(
   asyncHandler(async (req, res) => {
     const [score, events, user] = await Promise.all([
       prisma.riskScore.findUnique({ where: { userId: req.params.userId } }),
-      prisma.riskEvent.findMany({ where: { userId: req.params.userId }, orderBy: { createdAt: "desc" } }),
+      prisma.riskEvent.findMany({ where: { userId: req.params.userId }, orderBy: { createdAt: "desc" }, take: 200 }),
       prisma.user.findUnique({ where: { id: req.params.userId }, select: { id: true, fullName: true, phone: true, email: true, role: true, status: true } }),
     ])
     if (!user) throw ApiError.notFound("User not found.")

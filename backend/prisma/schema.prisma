@@ -210,6 +210,7 @@ model User {
   contentItemsCreated ContentItem[]
 
   @@index([role, status])
+  @@index([deletionRequestedAt])
   @@map("users")
 }
 
@@ -472,6 +473,8 @@ model RideRequest {
   @@index([passengerId])
   @@index([cityId, status])
   @@index([expiresAt])
+  /// Phase 4 §29 — the negotiation sweep's exact filter shape (status IN [...] AND expiresAt < now), every 5s.
+  @@index([status, expiresAt])
   @@map("ride_requests")
 }
 
@@ -498,6 +501,7 @@ model RideOffer {
   @@unique([rideRequestId, driverId])
   @@index([rideRequestId, status])
   @@index([driverId, status])
+  @@index([status, expiresAt])
   @@map("ride_offers")
 }
 
@@ -515,6 +519,7 @@ model CounterOffer {
 
   @@index([rideOfferId, status])
   @@index([expiresAt])
+  @@index([status, expiresAt])
   @@map("counter_offers")
 }
 
@@ -764,6 +769,7 @@ model WebhookEvent {
   processedAt     DateTime?
 
   @@unique([provider, eventId])
+  @@index([status, createdAt])
   @@map("webhook_events")
 }
 

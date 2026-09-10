@@ -74,6 +74,17 @@ export interface PlatformSettingsShape {
   "rateLimit.promoRedemption.limit": number
   "rateLimit.payment.windowSec": number
   "rateLimit.payment.limit": number
+
+  // Phase 4 §37 — Pilot Mode. Zone/vehicle-type scoping is already covered
+  // by ServiceZone/CityVehicleType.isActive and City.status, so this only
+  // adds what those don't: an on/off switch, driver/passenger supply caps
+  // for the pilot city, and whether registration requires an invitation
+  // code. 0 for either cap means "no cap enforced".
+  "pilotMode.enabled": boolean
+  "pilotMode.cityId": string
+  "pilotMode.maxDriverCount": number
+  "pilotMode.maxPassengerCount": number
+  "pilotMode.requireInvitationCode": boolean
 }
 
 const DEFAULTS: PlatformSettingsShape = {
@@ -125,6 +136,12 @@ const DEFAULTS: PlatformSettingsShape = {
   "rateLimit.promoRedemption.limit": 10,
   "rateLimit.payment.windowSec": 300,
   "rateLimit.payment.limit": 10,
+
+  "pilotMode.enabled": false,
+  "pilotMode.cityId": "",
+  "pilotMode.maxDriverCount": 0,
+  "pilotMode.maxPassengerCount": 0,
+  "pilotMode.requireInvitationCode": false,
 }
 
 const CACHE_TTL_MS = 5_000

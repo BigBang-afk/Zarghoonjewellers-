@@ -216,6 +216,7 @@ passengerRouter.get(
       where: { passengerId: passenger.id },
       include: { driver: { include: { user: true, vehicles: { take: 1 } } } },
       orderBy: { createdAt: "desc" },
+      take: 100,
     })
     res.json({
       favorites: favorites.map((f) => ({
@@ -292,6 +293,7 @@ passengerRouter.get(
       where: { passengerId: passenger.id },
       include: { pickup: true, destination: true, vehicleType: true, rideRequest: true },
       orderBy: { scheduledFor: "desc" },
+      take: 100,
     })
     res.json({ scheduledRides })
   }),

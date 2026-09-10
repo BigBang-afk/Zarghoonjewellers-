@@ -7,6 +7,7 @@ import { issueRefreshToken, revokeRefreshToken, rotateRefreshToken, signAccessTo
 import { requestOtp, verifyOtp } from "../../services/otp/OtpService.js"
 import { createReferralCodeForUser, applyReferralCode } from "../../services/referralService.js"
 import { resolvePlatformDefaultCurrency } from "../../shared/currency.js"
+import { enforcePilotModeForRegistration } from "../../services/pilotModeService.js"
 import { ApiError } from "../../utils/apiError.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
@@ -41,6 +42,8 @@ const registerPassengerSchema = z
     password: z.string().min(8).max(72),
     photoUrl: z.string().url().optional(),
     referredByCode: z.string().trim().max(20).optional(),
+    /** Only required when Pilot Mode has invitation-only sign-up turned on (Phase 4 §37). */
+    invitationCode: z.string().trim().max(20).optional(),
   })
   .merge(acquisitionSchema)
 
@@ -61,6 +64,7 @@ const registerDriverSchema = z
       plateNumber: z.string().trim().min(3).max(20),
     }),
     referredByCode: z.string().trim().max(20).optional(),
+    invitationCode: z.string().trim().max(20).optional(),
   })
   .merge(acquisitionSchema)
 
@@ -102,10 +106,12 @@ authRouter.post(
   "/register/passenger",
   validateBody(registerPassengerSchema),
   asyncHandler(async (req, res) => {
-    const { fullName, phone, email, password, photoUrl, referredByCode, acquisitionSource, acquisitionCampaign, marketingOptIn } = req.body
+    const { fullName, phone, email, password, photoUrl, referredByCode, acquisitionSource, acquisitionCampaign, marketingOptIn, invitationCode } = req.body
 
     const existing = await prisma.user.findUnique({ where: { phone } })
     if (existing) throw ApiError.conflict("PHONE_ALREADY_REGISTERED", "An account with this phone number already exists.")
+
+    await enforcePilotModeForRegistration({ role: "passenger", invitationCode })
 
     const passwordHash = await hashPassword(password)
     const currencyCode = await resolvePlatformDefaultCurrency()
@@ -147,13 +153,15 @@ authRouter.post(
   "/register/driver",
   validateBody(registerDriverSchema),
   asyncHandler(async (req, res) => {
-    const { fullName, phone, email, password, photoUrl, cityId, vehicle, referredByCode, acquisitionSource, acquisitionCampaign, marketingOptIn } = req.body
+    const { fullName, phone, email, password, photoUrl, cityId, vehicle, referredByCode, acquisitionSource, acquisitionCampaign, marketingOptIn, invitationCode } = req.body
 
     const existing = await prisma.user.findUnique({ where: { phone } })
     if (existing) throw ApiError.conflict("PHONE_ALREADY_REGISTERED", "An account with this phone number already exists.")
 
     const city = await prisma.city.findUnique({ where: { id: cityId } })
     if (!city) throw ApiError.badRequest("INVALID_CITY", "Selected city was not found.")
+
+    await enforcePilotModeForRegistration({ role: "driver", cityId, invitationCode })
 
     const vehicleType = await prisma.vehicleType.findUnique({ where: { code: vehicle.vehicleTypeCode } })
     if (!vehicleType) throw ApiError.badRequest("INVALID_VEHICLE_TYPE", "Selected vehicle type was not found.")

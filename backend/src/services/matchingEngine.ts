@@ -110,6 +110,12 @@ export async function findEligibleDrivers(params: {
         user: true,
         vehicles: { where: { vehicleTypeId: params.vehicleTypeId, status: "active" }, take: 1 },
       },
+      // Phase 4 §29 — bounds the worst case for a single very large city's
+      // online-driver pool before the in-memory haversine filter below runs.
+      // A real geospatial index (PostGIS/geohash) is the correct fix once a
+      // city's online-driver count regularly exceeds this; tracked as a
+      // known scaling limit, not solved here.
+      take: 500,
     }),
   ])
   const staleExcludedCount = Math.max(0, allOnlinePool - freshPool.length)

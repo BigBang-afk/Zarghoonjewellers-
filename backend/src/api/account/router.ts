@@ -21,6 +21,7 @@ accountRouter.get(
       where: { referrerUserId: req.auth!.userId },
       include: { referred: { select: { fullName: true, createdAt: true } } },
       orderBy: { createdAt: "desc" },
+      take: 200,
     })
     const totalRewarded = referralsMade
       .filter((r) => r.status === "rewarded")

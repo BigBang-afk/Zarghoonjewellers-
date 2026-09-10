@@ -170,12 +170,20 @@ export async function passengerRejectCounterOffer(counterOfferId: string, passen
 // server-owned"). Invoked on an interval from server.ts.
 // ---------------------------------------------------------------------
 
+// Phase 4 §29 — a batch cap on each sweep query. The sweep runs every 5s,
+// so a backlog this large would mean the sweep itself has been stalled
+// far longer than normal; capping the batch keeps one slow tick bounded
+// instead of trying to process an unbounded pile in a single pass — the
+// next tick (or the one after) works through the rest.
+const SWEEP_BATCH_SIZE = 200
+
 export async function sweepExpiredNegotiations(): Promise<void> {
   const now = new Date()
 
   const expiredCounters = await prisma.counterOffer.findMany({
     where: { status: "pending", expiresAt: { lt: now } },
     include: { rideOffer: { include: { rideRequest: true, driver: { include: { user: true } } } } },
+    take: SWEEP_BATCH_SIZE,
   })
   for (const co of expiredCounters) {
     await prisma.counterOffer.update({ where: { id: co.id }, data: { status: "expired" } })
@@ -185,6 +193,7 @@ export async function sweepExpiredNegotiations(): Promise<void> {
   const expiredOffers = await prisma.rideOffer.findMany({
     where: { status: "pending", expiresAt: { lt: now } },
     include: { rideRequest: true, driver: { include: { user: true } } },
+    take: SWEEP_BATCH_SIZE,
   })
   for (const offer of expiredOffers) {
     await prisma.rideOffer.update({ where: { id: offer.id }, data: { status: "expired" } })
@@ -196,6 +205,7 @@ export async function sweepExpiredNegotiations(): Promise<void> {
 
   const expiredRequests = await prisma.rideRequest.findMany({
     where: { status: { in: ["searching", "offers_open"] }, expiresAt: { lt: now } },
+    take: SWEEP_BATCH_SIZE,
   })
   for (const request of expiredRequests) {
     await expireRequest(request.id, "Your ride request expired before a driver was confirmed.")
