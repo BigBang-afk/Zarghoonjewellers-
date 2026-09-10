@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from "../../utils/password.js"
 import { issueRefreshToken, revokeRefreshToken, rotateRefreshToken, signAccessToken } from "../../utils/jwt.js"
 import { requestOtp, verifyOtp } from "../../services/otp/OtpService.js"
 import { createReferralCodeForUser, applyReferralCode } from "../../services/referralService.js"
+import { resolvePlatformDefaultCurrency } from "../../shared/currency.js"
 import { ApiError } from "../../utils/apiError.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
@@ -94,6 +95,7 @@ authRouter.post(
     if (existing) throw ApiError.conflict("PHONE_ALREADY_REGISTERED", "An account with this phone number already exists.")
 
     const passwordHash = await hashPassword(password)
+    const currencyCode = await resolvePlatformDefaultCurrency()
     const user = await prisma.user.create({
       data: {
         fullName,
@@ -104,7 +106,7 @@ authRouter.post(
         role: "passenger",
         status: "pending_verification",
         passengerProfile: { create: {} },
-        wallet: { create: { balance: 0, currencyCode: "PKR" } },
+        wallet: { create: { balance: 0, currencyCode } },
       },
     })
 

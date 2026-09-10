@@ -131,8 +131,29 @@ async function main() {
     data: { name: "Pakistan", isoCode: "PK", defaultCurrencyCode: "PKR" },
   })
   const city = await prisma.city.create({
-    data: { countryId: country.id, name: "Islamabad", status: "live", currencyCode: "PKR", timezone: "Asia/Karachi", centerLat: ISB_CENTER.lat, centerLng: ISB_CENTER.lng },
+    data: {
+      countryId: country.id, name: "Islamabad", status: "live", currencyCode: "PKR", timezone: "Asia/Karachi",
+      centerLat: ISB_CENTER.lat, centerLng: ISB_CENTER.lng,
+      paymentMethods: JSON.stringify(["cash", "card", "wallet"]),
+      driverRequirements: JSON.stringify({ minAge: 21, minLicenseYears: 1, requiredDocs: ["national_id", "driving_license", "vehicle_registration", "insurance"] }),
+    },
   })
+
+  // A second city configured but never launched (Phase 4 §1: the
+  // architecture must be multi-city-capable while the pilot itself stays
+  // focused on one city). Different country/currency/vehicle mix/driver
+  // requirements on purpose, to prove nothing is hard-coded to Pakistan/PKR.
+  console.log("[SEED] Creating a second (not-yet-launched) city to prove multi-city architecture...")
+  const uaeCountry = await prisma.country.create({ data: { name: "United Arab Emirates", isoCode: "AE", defaultCurrencyCode: "AED" } })
+  const dubai = await prisma.city.create({
+    data: {
+      countryId: uaeCountry.id, name: "Dubai", status: "planned", currencyCode: "AED", timezone: "Asia/Dubai",
+      centerLat: 25.2048, centerLng: 55.2708,
+      paymentMethods: JSON.stringify(["card", "wallet"]),
+      driverRequirements: JSON.stringify({ minAge: 25, minLicenseYears: 2, requiredDocs: ["national_id", "driving_license", "vehicle_registration", "insurance", "route_permit"] }),
+    },
+  })
+
   const zones = await Promise.all(
     ["Blue Area & Diplomatic Enclave", "F-Sectors", "G-Sectors & I-Sectors"].map((name) =>
       prisma.serviceZone.create({
@@ -169,6 +190,28 @@ async function main() {
       })
     }),
   )
+
+  // Dubai only offers Economy/Standard/Premium (no bike/rickshaw), at
+  // AED-appropriate fare magnitudes and a different commission — proving
+  // per-city vehicle mix and pricing are actually independent, not shared
+  // global constants (Phase 4 §1).
+  const dubaiVehicleCodes = ["economy", "standard", "premium"] as const
+  const dubaiFareCfg: Record<(typeof dubaiVehicleCodes)[number], { base: number; perKm: number; perMin: number; min: number; max: number }> = {
+    economy: { base: 5, perKm: 1.8, perMin: 0.3, min: 12, max: 250 },
+    standard: { base: 8, perKm: 2.4, perMin: 0.4, min: 18, max: 350 },
+    premium: { base: 15, perKm: 3.5, perMin: 0.6, min: 30, max: 600 },
+  }
+  for (const code of dubaiVehicleCodes) {
+    const vt = vehicleTypes.find((v) => v.code === code)!
+    await prisma.cityVehicleType.create({ data: { cityId: dubai.id, vehicleTypeId: vt.id } })
+    const cfg = dubaiFareCfg[code]
+    await prisma.fareRule.create({
+      data: {
+        cityId: dubai.id, vehicleTypeId: vt.id, baseFare: cfg.base, perKmRate: cfg.perKm, perMinRate: cfg.perMin,
+        minimumFare: cfg.min, maximumFare: cfg.max, commissionRate: 0.2, surgeMinMultiplier: 1.0, surgeMaxMultiplier: 2.0,
+      },
+    })
+  }
 
   console.log("[SEED] Writing default platform settings...")
   const settingsRows: [string, unknown, string][] = [

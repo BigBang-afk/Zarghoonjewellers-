@@ -9,10 +9,8 @@ import { ApiError } from "../../utils/apiError.js"
 import { getPaymentProvider } from "../../services/payments/index.js"
 import { validatePromoCode } from "../../services/promoService.js"
 import { createScheduledRide, cancelScheduledRide, rescheduleRide } from "../../services/scheduledRideService.js"
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
-}
+import { resolveUserCurrency } from "../../shared/currency.js"
+import { roundMoney } from "../../utils/money.js"
 
 export const passengerRouter = Router()
 passengerRouter.use(requireAuth, requireRole("passenger"))
@@ -114,7 +112,12 @@ passengerRouter.get(
     const transactions = wallet
       ? await prisma.transaction.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: "desc" }, take: 50 })
       : []
-    res.json({ balance: wallet?.balance ?? 0, currencyCode: wallet?.currencyCode ?? "PKR", transactions })
+    res.json({
+      balance: wallet?.balance ?? 0,
+      pendingBalance: wallet?.pendingBalance ?? 0,
+      currencyCode: wallet?.currencyCode ?? (await resolveUserCurrency(req.auth!.userId)),
+      transactions,
+    })
   }),
 )
 
@@ -129,10 +132,10 @@ passengerRouter.post(
 
     const wallet = await prisma.wallet.upsert({
       where: { userId: req.auth!.userId },
-      create: { userId: req.auth!.userId, balance: 0, currencyCode: "PKR" },
+      create: { userId: req.auth!.userId, balance: 0, currencyCode: await resolveUserCurrency(req.auth!.userId) },
       update: {},
     })
-    const newBalance = round2(wallet.balance + req.body.amount)
+    const newBalance = roundMoney(wallet.balance + req.body.amount, wallet.currencyCode)
     const [, transaction] = await prisma.$transaction([
       prisma.wallet.update({ where: { id: wallet.id }, data: { balance: newBalance } }),
       prisma.transaction.create({

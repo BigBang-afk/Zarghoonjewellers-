@@ -55,12 +55,31 @@ adminConfigRouter.patch(
       name: z.string().trim().min(1).max(60).optional(),
       /** JSON-encoded weekly schedule, e.g. {"mon":["00:00","23:59"],...}; omit/null = 24/7 */
       operatingHours: z.string().nullable().optional(),
+      /** Admin-configurable per city (Phase 4 §1) — array of allowed payment method codes */
+      paymentMethods: z.array(z.enum(["cash", "card", "wallet", "local_provider"])).nullable().optional(),
+      /** Admin-configurable per city (Phase 4 §16) — jurisdiction-specific driver requirements, never hard-coded */
+      driverRequirements: z
+        .object({
+          minAge: z.number().int().positive().optional(),
+          minLicenseYears: z.number().int().min(0).optional(),
+          requiredDocs: z.array(z.string()).optional(),
+        })
+        .nullable()
+        .optional(),
     }),
   ),
   asyncHandler(async (req, res) => {
     const before = await prisma.city.findUnique({ where: { id: req.params.id } })
     if (!before) throw ApiError.notFound("City not found.")
-    const city = await prisma.city.update({ where: { id: req.params.id }, data: req.body })
+    const { paymentMethods, driverRequirements, ...rest } = req.body
+    const city = await prisma.city.update({
+      where: { id: req.params.id },
+      data: {
+        ...rest,
+        ...(paymentMethods !== undefined ? { paymentMethods: paymentMethods ? JSON.stringify(paymentMethods) : null } : {}),
+        ...(driverRequirements !== undefined ? { driverRequirements: driverRequirements ? JSON.stringify(driverRequirements) : null } : {}),
+      },
+    })
     await writeAuditLog({ req, action: "city.update", targetTable: "cities", targetId: city.id, before, after: req.body })
     res.json({ city })
   }),
@@ -224,7 +243,12 @@ adminConfigRouter.get(
 adminConfigRouter.put(
   "/settings/:key",
   requireAdminRole("super_admin"),
-  validateBody(z.object({ value: z.union([z.number(), z.array(z.number())]), description: z.string().optional() })),
+  validateBody(
+    z.object({
+      value: z.union([z.number(), z.array(z.number()), z.boolean(), z.string(), z.array(z.string())]),
+      description: z.string().optional(),
+    }),
+  ),
   asyncHandler(async (req, res) => {
     const key = req.params.key as keyof PlatformSettingsShape
     if (!(key in SETTINGS_DEFAULTS)) throw ApiError.badRequest("UNKNOWN_SETTING", `Unknown setting key "${key}".`)

@@ -61,6 +61,10 @@ model City {
   centerLng       Float?
   /// JSON-encoded weekly schedule, e.g. {"mon":["00:00","23:59"],...}; null = 24/7
   operatingHours  String?
+  /// JSON-encoded array of allowed payment method codes for this city, e.g. ["cash","card","wallet"]; null = all methods
+  paymentMethods  String?
+  /// JSON-encoded jurisdiction-specific driver requirements, e.g. {"minAge":21,"minLicenseYears":1,"requiredDocs":["national_id","driving_license"]}; never hard-coded in application code (Phase 4 §16)
+  driverRequirements String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   deletedAt       DateTime?
@@ -76,6 +80,7 @@ model City {
   incentiveCampaigns IncentiveCampaign[]
   scheduledRides  ScheduledRide[]
   businessAccounts BusinessAccount[]
+  contentItems    ContentItem[]
 
   @@unique([countryId, name])
   @@index([status])
@@ -155,6 +160,14 @@ model User {
   primaryCityId     String?
   locale            String   @default("en")
   phoneVerifiedAt   DateTime?
+  /// Attribution (Phase 4 §17): organic | referral | social | campaign | partner | other
+  acquisitionSource String?
+  /// Free-text campaign identifier when acquisitionSource is "campaign" (never required to be a real row elsewhere)
+  acquisitionCampaign String?
+  marketingOptIn    Boolean  @default(true)
+  /// Set when the user requests account deletion (Phase 4 §26) — a human/job
+  /// processes this; financial and ride records are never hard-deleted.
+  deletionRequestedAt DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   deletedAt         DateTime?
@@ -192,6 +205,8 @@ model User {
   promoRedemptions  PromoRedemption[]
   businessEmployeeOf BusinessEmployee[]
   billingContactFor BusinessAccount[] @relation("BusinessBillingContact")
+  assignedSafetyEvents SafetyEvent[] @relation("SafetyEventAssignee")
+  contentItemsCreated ContentItem[]
 
   @@index([role, status])
   @@map("users")
@@ -235,6 +250,12 @@ model DriverProfile {
   lastLat             Float?
   lastLng             Float?
   lastLocationAt      DateTime?
+  /// JSON {lat,lng,address,activeUntil} — a soft dispatch preference only
+  /// (Phase 4 §10), never a routing guarantee; not yet factored into the
+  /// matching score (see Phase 4 completion report, known limitations).
+  destinationPreference String?
+  /// Admin/driver-set personal daily earnings goal, purely informational.
+  dailyEarningsTargetRs Float?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   deletedAt           DateTime?
@@ -249,6 +270,7 @@ model DriverProfile {
   incentiveProgress   DriverIncentiveProgress[]
   incentiveRewards    IncentiveReward[]
   favoritedBy         FavoriteDriver[]
+  payoutRequests      PayoutRequest[]
 
   @@index([cityId, availabilityStatus])
   @@index([verificationStatus])
@@ -583,10 +605,14 @@ model RideStatusHistory {
 // ---------------------------------------------------------------------
 
 /// discountType: percentage | flat
+/// campaignType (Phase 4 §15, cosmetic grouping only — all rule
+/// enforcement still runs through the fields below): new_user | first_ride |
+/// weekend | airport | city_launch | referral | driver_acquisition | business_promotion
 model Promotion {
   id              String   @id @default(uuid())
   code            String   @unique
   description     String?
+  campaignType    String?
   discountType    String
   discountValue   Float
   maxDiscount     Float?
@@ -652,10 +678,16 @@ model Commission {
   @@map("commissions")
 }
 
+/// balance = available (withdrawable) balance. pendingBalance = earned but
+/// not yet withdrawable (e.g. a just-completed ride payout still settling).
+/// paidBalance = lifetime total actually paid out — a running total, never
+/// decremented (Phase 4 §5: never claim money moved until the provider confirms it).
 model Wallet {
   id              String   @id @default(uuid())
   userId          String   @unique
   balance         Float    @default(0)
+  pendingBalance  Float    @default(0)
+  paidBalance     Float    @default(0)
   currencyCode    String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -683,6 +715,51 @@ model Transaction {
 
   @@index([walletId, createdAt])
   @@map("transactions")
+}
+
+// ---------------------------------------------------------------------
+// Driver payouts (Phase 4 §5) — a payout is only ever COMPLETED once the
+// payment provider actually confirms the transfer; never claimed earlier.
+// ---------------------------------------------------------------------
+
+/// status: requested | processing | completed | failed | cancelled
+model PayoutRequest {
+  id              String   @id @default(uuid())
+  driverId        String
+  amount          Float
+  method          String   // matches PaymentMethod
+  status          String   @default("requested")
+  reference       String?  // provider payout/transfer reference, set once processing/completed
+  notes           String?
+  createdAt       DateTime @default(now())
+  processedAt     DateTime?
+
+  driver          DriverProfile @relation(fields: [driverId], references: [id])
+
+  @@index([driverId, status])
+  @@index([status, createdAt])
+  @@map("payout_requests")
+}
+
+// ---------------------------------------------------------------------
+// Payment webhooks (Phase 4 §4) — every inbound webhook is recorded once
+// per (provider, eventId) so a redelivered event is a no-op, not a
+// double-processed payment.
+// ---------------------------------------------------------------------
+
+model WebhookEvent {
+  id              String   @id @default(uuid())
+  provider        String
+  eventId         String
+  eventType       String
+  payload         String   // JSON-encoded raw payload, for audit/replay
+  status          String   @default("received") // received | processed | failed
+  error           String?
+  createdAt       DateTime @default(now())
+  processedAt     DateTime?
+
+  @@unique([provider, eventId])
+  @@map("webhook_events")
 }
 
 // ---------------------------------------------------------------------
@@ -768,6 +845,12 @@ model SupportTicket {
   status              String   @default("open")
   priority            String   @default("medium")
   assignedAdminId     String?
+  /// Admin-only notes, never shown to the ticket author (Phase 4 §20).
+  internalNotes       String?
+  /// JSON-encoded array of evidence attachment URLs/descriptions.
+  attachments         String?
+  /// SLA target — set on assignment, purely informational (no auto-escalation).
+  dueAt               DateTime?
   resolvedAt          DateTime?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -835,11 +918,15 @@ model SafetyEvent {
   details     String?  // JSON-encoded
   lat         Float?
   lng         Float?
+  assignedAdminId String?
+  /// Investigator notes (Phase 4 §21) — internal, never shown to the reporting user.
+  notes       String?
   resolvedAt  DateTime?
   createdAt   DateTime @default(now())
 
   ride        Ride?    @relation(fields: [rideId], references: [id])
   user        User     @relation(fields: [userId], references: [id])
+  assignedAdmin User?  @relation("SafetyEventAssignee", fields: [assignedAdminId], references: [id])
 
   @@index([severity, resolvedAt])
   @@index([rideId])
@@ -1201,4 +1288,84 @@ model DriverOnlineSession {
 
   @@index([driverId, startedAt])
   @@map("driver_online_sessions")
+}
+
+// ---------------------------------------------------------------------
+// Marketing CMS (Phase 4 §18) — ordinary marketing content changes
+// without a code deploy. cityId null = shown in every city.
+// ---------------------------------------------------------------------
+
+/// type: banner | faq | announcement | help_article | app_message
+model ContentItem {
+  id          String   @id @default(uuid())
+  type        String
+  title       String
+  body        String
+  cityId      String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  city        City?    @relation(fields: [cityId], references: [id])
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+
+  @@index([type, isActive, sortOrder])
+  @@map("content_items")
+}
+
+// ---------------------------------------------------------------------
+// Notification templates (Phase 4 §19) — admin-editable copy per
+// notification key + locale, so wording changes don't need a deploy.
+// notify() falls back to the in-code default string when no row exists.
+// ---------------------------------------------------------------------
+
+model NotificationTemplate {
+  id        String   @id @default(uuid())
+  key       String   // e.g. "ride.driver_arriving"
+  locale    String   @default("en")
+  title     String   // may contain {{placeholders}}
+  body      String   // may contain {{placeholders}}
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, locale])
+  @@map("notification_templates")
+}
+
+// ---------------------------------------------------------------------
+// Pre-launch waitlist (Phase 4 §38) — collects only what's needed.
+// ---------------------------------------------------------------------
+
+/// userType: passenger | driver
+model WaitlistEntry {
+  id                String   @id @default(uuid())
+  fullName          String
+  contact           String   // phone or email, whichever the visitor gave
+  cityName          String
+  userType          String
+  marketingConsent  Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  @@index([cityName, userType])
+  @@map("waitlist_entries")
+}
+
+// ---------------------------------------------------------------------
+// Pilot Mode invitation codes (Phase 4 §37) — only checked when pilot
+// mode + invite-only is turned on via PlatformSetting; harmless otherwise.
+// ---------------------------------------------------------------------
+
+model InvitationCode {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  maxUses    Int?
+  usedCount  Int      @default(0)
+  cityId     String?
+  isActive   Boolean  @default(true)
+  expiresAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@map("invitation_codes")
 }

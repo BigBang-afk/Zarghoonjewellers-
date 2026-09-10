@@ -4,6 +4,7 @@ import { ApiError } from "../utils/apiError.js"
 import { getSetting } from "../config/settings.js"
 import { notify } from "./notifications/NotificationService.js"
 import { recordRiskEvent } from "./riskService.js"
+import { resolveUserCurrency } from "../shared/currency.js"
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
@@ -83,6 +84,10 @@ export async function qualifyReferralOnFirstRide(referredUserId: string): Promis
     prisma.user.findUniqueOrThrow({ where: { id: referral.referrerUserId } }),
     prisma.user.findUniqueOrThrow({ where: { id: referredUserId } }),
   ])
+  const currencyByUser = new Map([
+    [referral.referrerUserId, await resolveUserCurrency(referral.referrerUserId)],
+    [referredUserId, await resolveUserCurrency(referredUserId)],
+  ])
 
   await prisma.$transaction(async (tx) => {
     await tx.referral.update({
@@ -103,7 +108,7 @@ export async function qualifyReferralOnFirstRide(referredUserId: string): Promis
     ] as const) {
       const wallet = await tx.wallet.upsert({
         where: { userId },
-        create: { userId, balance: 0, currencyCode: "PKR" },
+        create: { userId, balance: 0, currencyCode: currencyByUser.get(userId)! },
         update: {},
       })
       const newBalance = round2(wallet.balance + amount)

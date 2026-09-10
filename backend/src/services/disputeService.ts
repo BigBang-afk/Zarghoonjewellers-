@@ -2,6 +2,7 @@ import { prisma } from "../utils/prisma.js"
 import { ApiError } from "../utils/apiError.js"
 import { getPaymentProvider } from "./payments/index.js"
 import { notify } from "./notifications/NotificationService.js"
+import { resolveUserCurrency } from "../shared/currency.js"
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100
@@ -72,7 +73,7 @@ export async function adjustDriverPayout(disputeId: string, adminUserId: string,
 
   const wallet = await prisma.wallet.upsert({
     where: { userId: dispute.ride.driver.userId },
-    create: { userId: dispute.ride.driver.userId, balance: 0, currencyCode: "PKR" },
+    create: { userId: dispute.ride.driver.userId, balance: 0, currencyCode: await resolveUserCurrency(dispute.ride.driver.userId) },
     update: {},
   })
   const newBalance = round2(wallet.balance + amountRs)
