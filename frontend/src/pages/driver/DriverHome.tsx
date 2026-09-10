@@ -11,6 +11,8 @@ import { useAuth } from "../../auth/AuthContext"
 import { useToast, errorMessage } from "../../shared/Toast"
 import { getSocket } from "../../services/socket"
 import { ISLAMABAD_CURRENT_LOCATION_FALLBACK } from "../../shared/islamabadPlaces"
+import { formatMoney } from "../../shared/money"
+import { useLocale } from "../../i18n"
 import type { DriverEarningsSummary, IncomingRequestSummary } from "../../types"
 import { ActiveRidePanel } from "./ActiveRidePanel"
 import { DriverRatingPanel } from "./DriverRatingPanel"
@@ -19,12 +21,14 @@ import { EarningsPanel } from "./EarningsPanel"
 export function DriverHome() {
   const { user } = useAuth()
   const { push } = useToast()
+  const { locale } = useLocale()
 
   const [loading, setLoading] = useState(true)
   const [verificationStatus, setVerificationStatus] = useState<string>("pending")
   const [online, setOnline] = useState(false)
   const [rating, setRating] = useState(5)
   const [todayRs, setTodayRs] = useState(0)
+  const [currencyCode, setCurrencyCode] = useState<string | null>(null)
   const [tab, setTab] = useState<"home" | "earnings">("home")
 
   const [incoming, setIncoming] = useState<IncomingRequestSummary[]>([])
@@ -54,6 +58,7 @@ export function DriverHome() {
     try {
       const data: DriverEarningsSummary = await driverApi.earnings()
       setTodayRs(data.today.totalRs)
+      setCurrencyCode(data.currencyCode)
       setRating(data.rating)
     } catch {
       // non-critical for the home screen
@@ -284,7 +289,7 @@ export function DriverHome() {
 
             <div className="grid grid-cols-4 gap-2 border-t border-ink-900/[0.06] bg-white px-4 py-3">
               {[
-                { label: "Today", value: `Rs ${todayRs.toLocaleString()}`, icon: Wallet },
+                { label: "Today", value: formatMoney(todayRs, currencyCode, locale), icon: Wallet },
                 { label: "Status", value: online ? "Online" : "Offline", icon: Route },
                 { label: "Verified", value: verificationStatus === "approved" ? "Yes" : "Pending", icon: Clock },
                 { label: "Rating", value: rating.toFixed(2), icon: Star },
@@ -331,7 +336,7 @@ export function DriverHome() {
                     </div>
                     <div className="ml-auto text-right">
                       <p className="text-[10px] text-ink-700/50">{current.bookingMode === "quick_match" ? "Fare" : "Proposed fare"}</p>
-                      <p className="font-display text-xl font-extrabold text-rivo-600">Rs {current.offerPrice}</p>
+                      <p className="font-display text-xl font-extrabold text-rivo-600">{formatMoney(current.offerPrice, currencyCode, locale)}</p>
                     </div>
                   </div>
 
@@ -363,7 +368,7 @@ export function DriverHome() {
                         Counter
                       </Button>
                       <Button variant="primary" onClick={() => accept(current.id)} disabled={busy}>
-                        Accept Rs {current.offerPrice}
+                        Accept {formatMoney(current.offerPrice, currencyCode, locale)}
                       </Button>
                     </div>
                   ) : (
@@ -371,7 +376,7 @@ export function DriverHome() {
                       <p className="text-xs font-semibold text-ink-700/70">Your counter-offer</p>
                       <div className="mt-2 flex items-center justify-between">
                         <button onClick={() => setCounterFare((f) => Math.max(50, f - 20))} className="h-9 w-9 rounded-full bg-ink-900/[0.06] font-bold">–</button>
-                        <span className="font-display text-2xl font-extrabold">Rs {counterFare}</span>
+                        <span className="font-display text-2xl font-extrabold">{formatMoney(counterFare, currencyCode, locale)}</span>
                         <button onClick={() => setCounterFare((f) => f + 20)} className="h-9 w-9 rounded-full bg-ink-900/[0.06] font-bold">+</button>
                       </div>
                       <div className="mt-3 grid grid-cols-2 gap-2">

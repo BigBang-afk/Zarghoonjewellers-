@@ -23,8 +23,15 @@ export function getCurrencyMeta(code: string): CurrencyMeta {
   return CURRENCIES[upper] ?? { code: upper, symbol: upper, decimals: 2 }
 }
 
-export function formatMoney(amount: number, currencyCode: string): string {
+/**
+ * `locale` defaults to the browser's own locale for the number grouping/
+ * digit conventions; pass the app's active locale (from useLocale) so a
+ * user who has picked Urdu sees Urdu-appropriate grouping rather than
+ * whatever the device happens to be set to (Phase 5 §3).
+ */
+export function formatMoney(amount: number, currencyCode: string | null | undefined, locale?: string): string {
+  if (!currencyCode) return amount.toLocaleString(locale)
   const meta = getCurrencyMeta(currencyCode)
-  const formatted = amount.toLocaleString(undefined, { minimumFractionDigits: meta.decimals, maximumFractionDigits: meta.decimals })
+  const formatted = amount.toLocaleString(locale, { minimumFractionDigits: meta.decimals, maximumFractionDigits: meta.decimals })
   return `${meta.symbol} ${formatted}`
 }

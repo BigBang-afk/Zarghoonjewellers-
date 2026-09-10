@@ -48,7 +48,7 @@ export function Landing() {
           </nav>
           <div className="flex items-center gap-2">
             <Link to="/login"><Button variant="ghost" size="sm">Log in</Button></Link>
-            <Link to="/register/passenger"><Button variant="primary" size="sm" icon={<ArrowRight className="h-4 w-4" />} className="flex-row-reverse">Get the app</Button></Link>
+            <Link to="/register/passenger"><Button variant="primary" size="sm" icon={<ArrowRight className="h-4 w-4 rtl:rotate-180" />} className="flex-row-reverse">Get the app</Button></Link>
           </div>
         </div>
       </header>

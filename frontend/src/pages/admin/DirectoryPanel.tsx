@@ -5,6 +5,8 @@ import { Badge } from "../../components/ui/Badge"
 import { EmptyState, LoadingState } from "../../components/ui/States"
 import { api } from "../../api/client"
 import { useToast, errorMessage } from "../../shared/Toast"
+import { formatMoney } from "../../shared/money"
+import { useLocale } from "../../i18n"
 
 interface PassengerRow {
   id: string
@@ -29,6 +31,7 @@ interface RideRequestRow {
   passenger: { user: { fullName: string } }
   pickup: { address: string }
   destination: { address: string }
+  city: { currencyCode: string }
   createdAt: string
 }
 
@@ -140,6 +143,7 @@ function DriverTable({ rows }: { rows: DriverRow[] }) {
 }
 
 function RideRequestTable({ rows }: { rows: RideRequestRow[] }) {
+  const { locale } = useLocale()
   return (
     <table className="w-full min-w-[720px] text-left text-sm">
       <thead>
@@ -159,7 +163,7 @@ function RideRequestTable({ rows }: { rows: RideRequestRow[] }) {
             <td className="px-4 py-3 text-ink-700/70">{r.pickup.address}</td>
             <td className="px-4 py-3 text-ink-700/70">{r.destination.address}</td>
             <td className="px-4 py-3"><Badge tone={r.bookingMode === "quick_match" ? "brand" : "warning"}>{r.bookingMode === "quick_match" ? "Quick Match" : "Competitive"}</Badge></td>
-            <td className="px-4 py-3 font-semibold">Rs {r.proposedFare}</td>
+            <td className="px-4 py-3 font-semibold">{formatMoney(r.proposedFare, r.city.currencyCode, locale)}</td>
             <td className="px-4 py-3"><Badge tone={statusTone[r.status] ?? "neutral"} dot>{r.status}</Badge></td>
           </tr>
         ))}

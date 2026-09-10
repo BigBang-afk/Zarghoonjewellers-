@@ -5,14 +5,18 @@ import { Button } from "../../components/ui/Button"
 import { LoadingState } from "../../components/ui/States"
 import { passengerApi } from "../../api/passenger"
 import { useToast, errorMessage } from "../../shared/Toast"
+import { formatMoney } from "../../shared/money"
+import { useLocale } from "../../i18n"
 import type { WalletTransaction } from "../../types"
 
 const TOPUP_AMOUNTS = [200, 500, 1000, 2000]
 
 export function WalletPanel({ onClose }: { onClose: () => void }) {
   const { push } = useToast()
+  const { locale } = useLocale()
   const [loading, setLoading] = useState(true)
   const [balance, setBalance] = useState(0)
+  const [currencyCode, setCurrencyCode] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<WalletTransaction[]>([])
   const [toppingUp, setToppingUp] = useState<number | null>(null)
 
@@ -20,6 +24,7 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
     try {
       const wallet = await passengerApi.wallet()
       setBalance(wallet.balance)
+      setCurrencyCode(wallet.currencyCode)
       setTransactions(wallet.transactions)
     } catch (err) {
       push("error", errorMessage(err))
@@ -38,7 +43,7 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
     try {
       const result = await passengerApi.walletTopup(amount)
       setBalance(result.balance)
-      push("success", `Rs ${amount} added to your wallet.`)
+      push("success", `${formatMoney(amount, currencyCode, locale)} added to your wallet.`)
       await load()
     } catch (err) {
       push("error", errorMessage(err))
@@ -51,7 +56,7 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
     <div className="flex flex-1 flex-col overflow-y-auto px-4 pb-24 pt-4 scrollbar-none">
       <div className="mb-3 flex items-center gap-3">
         <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-900/[0.05]">
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
         </button>
         <p className="font-display text-lg font-bold">Wallet</p>
       </div>
@@ -66,7 +71,7 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
             </div>
             <div>
               <p className="text-xs text-white/70">Balance</p>
-              <p className="font-display text-2xl font-extrabold">Rs {balance.toFixed(0)}</p>
+              <p className="font-display text-2xl font-extrabold">{formatMoney(balance, currencyCode, locale)}</p>
             </div>
           </div>
 
@@ -80,7 +85,7 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
                 disabled={toppingUp !== null}
                 onClick={() => topup(amount)}
               >
-                {toppingUp === amount ? "…" : `Rs ${amount}`}
+                {toppingUp === amount ? "…" : formatMoney(amount, currencyCode, locale)}
               </Button>
             ))}
           </div>
@@ -94,11 +99,11 @@ export function WalletPanel({ onClose }: { onClose: () => void }) {
                 <Card key={t.id} className="flex items-center justify-between px-4 py-3">
                   <div>
                     <p className="text-sm font-semibold capitalize">{t.type.replace(/_/g, " ")}</p>
-                    <p className="text-[11px] text-ink-700/50">{t.description ?? new Date(t.createdAt).toLocaleString()}</p>
+                    <p className="text-[11px] text-ink-700/50">{t.description ?? new Date(t.createdAt).toLocaleString(locale)}</p>
                   </div>
                   <p className={`font-display text-sm font-extrabold ${t.amount >= 0 ? "text-success-600" : "text-danger-600"}`}>
                     {t.amount >= 0 ? "+" : ""}
-                    Rs {t.amount.toFixed(0)}
+                    {formatMoney(t.amount, currencyCode, locale)}
                   </p>
                 </Card>
               ))}

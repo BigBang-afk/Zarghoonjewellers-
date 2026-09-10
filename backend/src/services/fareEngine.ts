@@ -4,6 +4,7 @@ import { ApiError } from "../utils/apiError.js"
 import { roundMoney, addMoney, multiplyMoney } from "../utils/money.js"
 
 export interface FareBreakdown {
+  currencyCode: string
   baseFare: number
   distanceCharge: number
   durationCharge: number
@@ -98,6 +99,7 @@ export async function computeFare(input: {
   const typicalRangeHigh = clampRange(multiplyMoney(suggestedFare, 1 + rangeSpreadPct, currencyCode))
 
   return {
+    currencyCode,
     baseFare,
     distanceCharge,
     durationCharge,

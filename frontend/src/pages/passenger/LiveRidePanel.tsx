@@ -8,6 +8,8 @@ import { ridesApi } from "../../api/rides"
 import { safetyApi } from "../../api/safety"
 import { getSocket } from "../../services/socket"
 import { useToast, errorMessage } from "../../shared/Toast"
+import { formatMoney } from "../../shared/money"
+import { useLocale } from "../../i18n"
 import type { RideStatus, RideSummary } from "../../types"
 
 const STEPS: { status: RideStatus; label: string }[] = [
@@ -21,6 +23,7 @@ const STEPS: { status: RideStatus; label: string }[] = [
 export function LiveRidePanel({ rideId, onCompleted }: { rideId: string; onCompleted: () => void }) {
   const [ride, setRide] = useState<RideSummary | null>(null)
   const { push } = useToast()
+  const { locale } = useLocale()
 
   async function refresh() {
     try {
@@ -108,7 +111,9 @@ export function LiveRidePanel({ rideId, onCompleted }: { rideId: string; onCompl
             </div>
             <div className="text-right">
               <p className="text-xs text-ink-700/50">Fare</p>
-              <p className="font-display text-lg font-extrabold text-rivo-600">Rs {ride.finalFare ?? ride.agreedFare}</p>
+              <p className="font-display text-lg font-extrabold text-rivo-600">
+                {formatMoney(ride.finalFare ?? ride.agreedFare, ride.driver.city?.currencyCode ?? null, locale)}
+              </p>
             </div>
           </div>
           <div className="mt-3 flex items-center justify-between rounded-lg bg-ink-900/[0.03] px-3 py-2 text-xs">

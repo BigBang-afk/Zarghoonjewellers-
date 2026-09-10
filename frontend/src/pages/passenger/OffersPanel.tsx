@@ -7,19 +7,24 @@ import { EmptyState } from "../../components/ui/States"
 import { ridesApi } from "../../api/rides"
 import { getSocket } from "../../services/socket"
 import { useToast, errorMessage } from "../../shared/Toast"
+import { formatMoney } from "../../shared/money"
+import { useLocale } from "../../i18n"
 import type { DriverOfferSummary } from "../../types"
 
 type SortKey = "price" | "eta" | "rating" | "distance"
 
 export function OffersPanel({
   rideRequestId,
+  currencyCode,
   onBooked,
   onCancelled,
 }: {
   rideRequestId: string
+  currencyCode: string | null
   onBooked: (rideId: string) => void
   onCancelled: () => void
 }) {
+  const { locale } = useLocale()
   const [offers, setOffers] = useState<DriverOfferSummary[]>([])
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>("price")
@@ -143,7 +148,7 @@ export function OffersPanel({
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-display text-lg font-extrabold text-rivo-600">Rs {price}</p>
+                    <p className="font-display text-lg font-extrabold text-rivo-600">{formatMoney(price, currencyCode, locale)}</p>
                     {o.counterOffer ? <Badge tone="warning">Counter</Badge> : o.status === "pending" ? <Badge tone="neutral">Awaiting response</Badge> : null}
                   </div>
                 </div>

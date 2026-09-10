@@ -265,7 +265,7 @@ async function serializeRide(rideId: string) {
     where: { id: rideId },
     include: {
       passenger: { include: { user: true } },
-      driver: { include: { user: true } },
+      driver: { include: { user: true, city: { select: { currencyCode: true } } } },
       vehicle: true,
       pickup: true,
       destination: true,
@@ -310,7 +310,13 @@ ridesRouter.get(
     const [rides, total] = await Promise.all([
       prisma.ride.findMany({
         where,
-        include: { passenger: { include: { user: true } }, driver: { include: { user: true } }, vehicle: true, pickup: true, destination: true },
+        include: {
+          passenger: { include: { user: true } },
+          driver: { include: { user: true, city: { select: { currencyCode: true } } } },
+          vehicle: true,
+          pickup: true,
+          destination: true,
+        },
         orderBy: { createdAt: "desc" },
         take,
         skip,

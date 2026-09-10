@@ -232,6 +232,7 @@ driverRouter.get(
     const totalRides = driver.completedRides + driver.cancelledRides
 
     res.json({
+      currencyCode,
       walletBalanceRs: wallet?.balance ?? 0,
       pendingBalanceRs: wallet?.pendingBalance ?? 0,
       paidBalanceRs: wallet?.paidBalance ?? 0,

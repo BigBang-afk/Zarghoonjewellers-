@@ -7,6 +7,8 @@ import { Button } from "../../components/ui/Button"
 import { ridesApi } from "../../api/rides"
 import { getSocket } from "../../services/socket"
 import { useToast, errorMessage } from "../../shared/Toast"
+import { formatMoney } from "../../shared/money"
+import { useLocale } from "../../i18n"
 import type { RideStatus, RideSummary } from "../../types"
 
 const NEXT_ACTION: Partial<Record<RideStatus, { target: RideStatus; label: string }>> = {
@@ -20,6 +22,7 @@ export function ActiveRidePanel({ rideId, onCompleted }: { rideId: string; onCom
   const [ride, setRide] = useState<RideSummary | null>(null)
   const [busy, setBusy] = useState(false)
   const { push } = useToast()
+  const { locale } = useLocale()
 
   async function refresh() {
     try {
@@ -97,7 +100,7 @@ export function ActiveRidePanel({ rideId, onCompleted }: { rideId: string; onCom
             </div>
             <div className="text-right">
               <p className="text-xs text-ink-700/50">Fare</p>
-              <p className="font-display text-lg font-extrabold text-rivo-600">Rs {ride.agreedFare}</p>
+              <p className="font-display text-lg font-extrabold text-rivo-600">{formatMoney(ride.agreedFare, ride.driver.city?.currencyCode ?? null, locale)}</p>
             </div>
           </div>
           <div className="mt-3 space-y-2 rounded-xl bg-ink-900/[0.03] p-3">

@@ -3,6 +3,7 @@ import { prisma } from "../../utils/prisma.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { getSetting } from "../../config/settings.js"
 import { haversineKm } from "../../utils/geo.js"
+import { roundMoney } from "../../utils/money.js"
 
 export const adminDashboardRouter = Router()
 
@@ -24,6 +25,12 @@ adminDashboardRouter.get(
     const todayFilter = { createdAt: { gte: startOfToday() } }
     const cityFilter = cityId ? { cityId } : {}
     const rideCityFilter = cityId ? { rideRequest: { cityId } } : {}
+    // Money aggregates join back to the ride's city through the payment/
+    // transaction relation — without this filter these figures silently
+    // stayed platform-wide even when an admin filtered every other card
+    // by city (Phase 5 §2: never mix currencies without saying so).
+    const paymentCityFilter = cityId ? { ride: { rideRequest: { cityId } } } : {}
+    const transactionCityFilter = cityId ? { payment: { ride: { rideRequest: { cityId } } } } : {}
 
     const [
       totalPassengers,
@@ -39,31 +46,40 @@ adminDashboardRouter.get(
       driverPayoutAgg,
       fareAgg,
       pendingVerifications,
+      city,
     ] = await Promise.all([
-      prisma.passengerProfile.count(),
-      prisma.passengerProfile.count({ where: { user: { status: "active" } } }),
-      prisma.driverProfile.count({ where: { deletedAt: null } }),
-      prisma.driverProfile.count({ where: { availabilityStatus: "online" } }),
+      prisma.passengerProfile.count({ where: cityId ? { user: { primaryCityId: cityId } } : {} }),
+      prisma.passengerProfile.count({ where: { user: { status: "active", ...(cityId ? { primaryCityId: cityId } : {}) } } }),
+      prisma.driverProfile.count({ where: { deletedAt: null, ...cityFilter } }),
+      prisma.driverProfile.count({ where: { availabilityStatus: "online", ...cityFilter } }),
       prisma.rideRequest.count({ where: { ...cityFilter, ...todayFilter } }),
       prisma.ride.count({ where: { status: "ride_completed", ...rideCityFilter, ...todayFilter } }),
       prisma.ride.count({ where: { status: { in: ["cancelled_by_passenger", "cancelled_by_driver"] }, ...rideCityFilter, ...todayFilter } }),
       prisma.ride.count({ where: { status: { notIn: ["ride_completed", "cancelled_by_passenger", "cancelled_by_driver", "expired", "disputed"] }, ...rideCityFilter } }),
-      prisma.payment.aggregate({ _sum: { amount: true }, where: { status: "captured" } }),
-      prisma.commission.aggregate({ _sum: { amount: true } }),
-      prisma.transaction.aggregate({ _sum: { amount: true }, where: { type: "ride_payout" } }),
-      prisma.ride.aggregate({ _avg: { finalFare: true, durationMin: true }, where: { status: "ride_completed" } }),
-      prisma.driverProfile.count({ where: { verificationStatus: "pending" } }),
+      prisma.payment.aggregate({ _sum: { amount: true }, where: { status: "captured", ...paymentCityFilter } }),
+      prisma.commission.aggregate({ _sum: { amount: true }, where: { payment: { status: "captured", ...paymentCityFilter } } }),
+      prisma.transaction.aggregate({ _sum: { amount: true }, where: { type: "ride_payout", ...transactionCityFilter } }),
+      prisma.ride.aggregate({ _avg: { finalFare: true, durationMin: true }, where: { status: "ride_completed", ...rideCityFilter } }),
+      prisma.driverProfile.count({ where: { verificationStatus: "pending", ...cityFilter } }),
+      cityId ? prisma.city.findUnique({ where: { id: cityId }, select: { currencyCode: true } }) : Promise.resolve(null),
     ])
 
     const [driverCancelled, driverTotal, passengerCancelled, passengerTotal, repeatPassengers] = await Promise.all([
-      prisma.ride.count({ where: { status: "cancelled_by_driver" } }),
-      prisma.ride.count(),
-      prisma.ride.count({ where: { status: "cancelled_by_passenger" } }),
-      prisma.ride.count(),
-      prisma.passengerProfile.count({ where: { completedRides: { gt: 1 } } }),
+      prisma.ride.count({ where: { status: "cancelled_by_driver", ...rideCityFilter } }),
+      prisma.ride.count({ where: rideCityFilter }),
+      prisma.ride.count({ where: { status: "cancelled_by_passenger", ...rideCityFilter } }),
+      prisma.ride.count({ where: rideCityFilter }),
+      prisma.passengerProfile.count({ where: { completedRides: { gt: 1 }, ...(cityId ? { user: { primaryCityId: cityId } } : {}) } }),
     ])
 
+    // A platform-wide view (no cityId) sums figures that may be in
+    // different currencies — currencyCode comes back null rather than
+    // pretending a single symbol applies (Phase 5 §2).
+    const currencyCode = city?.currencyCode ?? null
+    const roundFn = (n: number) => (currencyCode ? roundMoney(n, currencyCode) : round2(n))
+
     res.json({
+      currencyCode,
       totalPassengers,
       activePassengers,
       totalDrivers,
@@ -72,10 +88,10 @@ adminDashboardRouter.get(
       completedToday,
       cancelledToday,
       activeRides,
-      grossBookingValueRs: round2(gbvAgg._sum.amount ?? 0),
-      platformRevenueRs: round2(commissionAgg._sum.amount ?? 0),
-      driverEarningsRs: round2(driverPayoutAgg._sum.amount ?? 0),
-      avgFareRs: round2(fareAgg._avg.finalFare ?? 0),
+      grossBookingValueRs: roundFn(gbvAgg._sum.amount ?? 0),
+      platformRevenueRs: roundFn(commissionAgg._sum.amount ?? 0),
+      driverEarningsRs: roundFn(driverPayoutAgg._sum.amount ?? 0),
+      avgFareRs: roundFn(fareAgg._avg.finalFare ?? 0),
       avgDurationMin: round2(fareAgg._avg.durationMin ?? 0),
       driverCancellationRatePct: driverTotal ? round2((driverCancelled / driverTotal) * 100) : 0,
       passengerCancellationRatePct: passengerTotal ? round2((passengerCancelled / passengerTotal) * 100) : 0,

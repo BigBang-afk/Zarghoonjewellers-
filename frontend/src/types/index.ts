@@ -32,6 +32,7 @@ export interface City {
 export interface FareEstimate {
   route: { distanceKm: number; durationMin: number }
   fare: {
+    currencyCode: string
     baseFare: number
     distanceCharge: number
     durationCharge: number
@@ -119,7 +120,7 @@ export interface RideSummary {
   paymentMethod: string
   shareToken: string | null
   passenger: { userId: string; user: PublicUser }
-  driver: { id: string; userId: string; user: PublicUser; ratingAvg?: number }
+  driver: { id: string; userId: string; user: PublicUser; ratingAvg?: number; city?: { currencyCode: string } }
   vehicle: { make: string; model: string; color: string | null; plateNumber: string }
   pickup: { address: string; lat: number; lng: number }
   destination: { address: string; lat: number; lng: number }
@@ -137,6 +138,7 @@ export interface NotificationItem {
 }
 
 export interface DriverEarningsSummary {
+  currencyCode: string
   walletBalanceRs: number
   pendingBalanceRs: number
   paidBalanceRs: number
@@ -197,6 +199,8 @@ export interface FavoriteDriverSummary {
 }
 
 export interface AdminKpis {
+  /** null when this is a platform-wide (no city filter) view spanning more than one currency. */
+  currencyCode: string | null
   totalPassengers: number
   activePassengers: number
   totalDrivers: number

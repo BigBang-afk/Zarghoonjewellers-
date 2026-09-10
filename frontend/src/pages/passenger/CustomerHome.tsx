@@ -23,7 +23,8 @@ import { passengerApi, type RecentPlace, type SavedPlace } from "../../api/passe
 import { ridesApi, type Place } from "../../api/rides"
 import { useAuth } from "../../auth/AuthContext"
 import { useToast, errorMessage } from "../../shared/Toast"
-import { useT } from "../../i18n"
+import { useLocale } from "../../i18n"
+import { formatMoney, getCurrencyMeta } from "../../shared/money"
 import { ISLAMABAD_CURRENT_LOCATION_FALLBACK, POPULAR_ISLAMABAD_PLACES } from "../../shared/islamabadPlaces"
 import type { City, FareEstimate, VehicleType } from "../../types"
 import { SearchingPanel } from "./SearchingPanel"
@@ -37,7 +38,7 @@ type View = "home" | "searching" | "offers" | "live" | "rating" | "wallet"
 export function CustomerHome() {
   const { user } = useAuth()
   const { push } = useToast()
-  const t = useT()
+  const { t, locale } = useLocale()
 
   const [loadingRefData, setLoadingRefData] = useState(true)
   const [city, setCity] = useState<City | null>(null)
@@ -128,7 +129,7 @@ export function CustomerHome() {
         vehicleTypeId,
         fareAmount: mode === "custom" ? customFare : selectedFare.suggestedFare,
       })
-      setPromoStatus({ ok: true, message: `Rs ${result.discountAmount} off applied` })
+      setPromoStatus({ ok: true, message: `${formatMoney(result.discountAmount, city.currencyCode, locale)} off applied` })
     } catch (err) {
       setPromoStatus({ ok: false, message: errorMessage(err) })
     } finally {
@@ -188,7 +189,7 @@ export function CustomerHome() {
           <SearchingPanel rideRequestId={activeRequestId} onMatched={onRideBooked} onCancelled={(reason) => { if (reason) push("info", reason); resetToHome() }} />
         )}
         {view === "offers" && activeRequestId && (
-          <OffersPanel rideRequestId={activeRequestId} onBooked={onRideBooked} onCancelled={resetToHome} />
+          <OffersPanel rideRequestId={activeRequestId} currencyCode={city?.currencyCode ?? null} onBooked={onRideBooked} onCancelled={resetToHome} />
         )}
         {view === "live" && activeRideId && <LiveRidePanel rideId={activeRideId} onCompleted={() => setView("rating")} />}
         {view === "rating" && activeRideId && (
@@ -290,7 +291,9 @@ export function CustomerHome() {
                           >
                             <VehicleIcon type={v.code} className="h-6 w-6 text-ink-900" />
                             <span className="text-xs font-bold">{v.name}</span>
-                            <span className="text-xs font-extrabold text-rivo-600">Rs {fareByVehicle[v.id]?.suggestedFare ?? "…"}</span>
+                            <span className="text-xs font-extrabold text-rivo-600">
+                              {fareByVehicle[v.id] ? formatMoney(fareByVehicle[v.id].suggestedFare, fareByVehicle[v.id].currencyCode, locale) : "…"}
+                            </span>
                           </button>
                         ))}
                       </div>
@@ -311,22 +314,26 @@ export function CustomerHome() {
                             onClick={() => { setMode("custom"); setCustomFare(selectedFare.suggestedFare) }}
                             className={`rounded-2xl border p-3.5 text-left transition-colors ${mode === "custom" ? "border-gold-500 bg-gold-400/10" : "border-ink-900/10 bg-white"}`}
                           >
-                            <span className="font-display text-sm font-extrabold text-gold-600">Rs</span>
+                            <span className="font-display text-sm font-extrabold text-gold-600">
+                              {getCurrencyMeta(selectedFare?.currencyCode ?? city?.currencyCode ?? "PKR").symbol}
+                            </span>
                             <p className="mt-2 text-sm font-bold">Set Your Price</p>
                             <p className="text-[11px] text-ink-700/60">Drivers bid on your fare</p>
                           </button>
                         </div>
 
                         <p className="mt-2 text-[11px] text-ink-700/50">
-                          Estimate only · typically Rs {selectedFare.typicalRangeLow}–{selectedFare.typicalRangeHigh}
+                          Estimate only · typically {formatMoney(selectedFare.typicalRangeLow, selectedFare.currencyCode, locale)}–{formatMoney(selectedFare.typicalRangeHigh, selectedFare.currencyCode, locale)}
                         </p>
 
                         {mode === "custom" && (
                           <Card className="mt-3 flex items-center justify-between p-4">
                             <div>
                               <p className="text-xs text-ink-700/60">Your offer</p>
-                              <p className="font-display text-2xl font-extrabold">Rs {customFare}</p>
-                              <p className="text-[11px] text-ink-700/50">Min Rs {selectedFare.minimumFare} · Suggested Rs {selectedFare.suggestedFare}</p>
+                              <p className="font-display text-2xl font-extrabold">{formatMoney(customFare, selectedFare.currencyCode, locale)}</p>
+                              <p className="text-[11px] text-ink-700/50">
+                                Min {formatMoney(selectedFare.minimumFare, selectedFare.currencyCode, locale)} · Suggested {formatMoney(selectedFare.suggestedFare, selectedFare.currencyCode, locale)}
+                              </p>
                             </div>
                             <div className="flex items-center gap-2">
                               <button onClick={() => setCustomFare((f) => Math.max(selectedFare.minimumFare, f - 20))} className="flex h-9 w-9 items-center justify-center rounded-full bg-ink-900/[0.06]">
@@ -368,7 +375,11 @@ export function CustomerHome() {
               {destination && mode && (
                 <div className="absolute inset-x-0 bottom-16 px-4">
                   <Button size="lg" fullWidth variant={mode === "custom" ? "gold" : "primary"} onClick={confirmBooking} disabled={submitting}>
-                    {submitting ? "Sending…" : mode === "custom" ? `Send offer · Rs ${customFare}` : `Confirm Quick Match · Rs ${selectedFare?.suggestedFare}`}
+                    {submitting
+                      ? "Sending…"
+                      : mode === "custom"
+                        ? `Send offer · ${formatMoney(customFare, selectedFare?.currencyCode ?? city?.currencyCode ?? null, locale)}`
+                        : `Confirm Quick Match · ${selectedFare ? formatMoney(selectedFare.suggestedFare, selectedFare.currencyCode, locale) : ""}`}
                   </Button>
                 </div>
               )}

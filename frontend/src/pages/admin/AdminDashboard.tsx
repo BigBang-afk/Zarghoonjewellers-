@@ -35,6 +35,8 @@ import { MapCanvas, CarMarker } from "../../components/ui/MapCanvas"
 import { adminApi } from "../../api/admin"
 import { useAuth } from "../../auth/AuthContext"
 import { useToast, errorMessage } from "../../shared/Toast"
+import { formatMoney, getCurrencyMeta } from "../../shared/money"
+import { useLocale } from "../../i18n"
 import type { AdminKpis, City } from "../../types"
 import { DriverVerificationPanel } from "./DriverVerificationPanel"
 import { DirectoryPanel } from "./DirectoryPanel"
@@ -103,6 +105,7 @@ const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Passengers", "
 export function AdminDashboard() {
   const { user } = useAuth()
   const { push } = useToast()
+  const { locale } = useLocale()
   const [active, setActive] = useState("Dashboard")
   const [kpis, setKpis] = useState<AdminKpis | null>(null)
   const [cities, setCities] = useState<(City & { _count: { driverProfiles: number; serviceZones: number } })[]>([])
@@ -265,9 +268,15 @@ export function AdminDashboard() {
                   { label: "Rides today", value: kpis.ridesRequestedToday, icon: Route },
                   { label: "Active rides", value: kpis.activeRides, icon: Gauge },
                   { label: "Online drivers", value: kpis.onlineDrivers, icon: Car },
-                  { label: "Gross booking value", value: `Rs ${(kpis.grossBookingValueRs / 1000).toFixed(1)}k`, icon: Wallet },
-                  { label: "Platform revenue", value: `Rs ${kpis.platformRevenueRs.toLocaleString()}`, icon: Banknote },
-                  { label: "Avg. fare", value: `Rs ${kpis.avgFareRs}`, icon: Tag },
+                  {
+                    label: "Gross booking value",
+                    value: kpis.currencyCode
+                      ? `${getCurrencyMeta(kpis.currencyCode).symbol} ${(kpis.grossBookingValueRs / 1000).toFixed(1)}k`
+                      : `${(kpis.grossBookingValueRs / 1000).toFixed(1)}k (mixed currencies)`,
+                    icon: Wallet,
+                  },
+                  { label: "Platform revenue", value: formatMoney(kpis.platformRevenueRs, kpis.currencyCode, locale), icon: Banknote },
+                  { label: "Avg. fare", value: formatMoney(kpis.avgFareRs, kpis.currencyCode, locale), icon: Tag },
                   { label: "Completed today", value: kpis.completedToday, icon: CheckCircle2 },
                   { label: "Repeat passengers", value: `${kpis.repeatPassengerRatePct}%`, icon: Users },
                 ].map((k) => (
@@ -286,7 +295,7 @@ export function AdminDashboard() {
                   { label: "Total passengers", value: kpis.totalPassengers },
                   { label: "Total drivers", value: kpis.totalDrivers },
                   { label: "Cancelled today", value: kpis.cancelledToday },
-                  { label: "Driver earnings", value: `Rs ${kpis.driverEarningsRs.toLocaleString()}` },
+                  { label: "Driver earnings", value: formatMoney(kpis.driverEarningsRs, kpis.currencyCode, locale) },
                   { label: "Driver cancellation", value: `${kpis.driverCancellationRatePct}%` },
                 ].map((s) => (
                   <div key={s.label}>
@@ -326,7 +335,7 @@ export function AdminDashboard() {
                         </div>
                         <div className="text-right">
                           <Badge tone={c.status === "live" ? "success" : c.status === "launching" ? "warning" : "neutral"}>{c.status}</Badge>
-                          <p className="mt-1 text-[11px] text-ink-700/55">{c._count.driverProfiles.toLocaleString()} drivers</p>
+                          <p className="mt-1 text-[11px] text-ink-700/55">{c._count.driverProfiles.toLocaleString(locale)} drivers</p>
                         </div>
                       </div>
                     ))}
