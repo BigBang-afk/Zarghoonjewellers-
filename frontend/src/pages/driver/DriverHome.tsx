@@ -18,6 +18,7 @@ import { ActiveRidePanel } from "./ActiveRidePanel"
 import { DriverRatingPanel } from "./DriverRatingPanel"
 import { EarningsPanel } from "./EarningsPanel"
 import { OnboardingPanel } from "./OnboardingPanel"
+import { LostFoundSheet } from "./LostFoundSheet"
 import { ReferralPanel } from "../../components/ReferralPanel"
 
 export function DriverHome() {
@@ -32,6 +33,7 @@ export function DriverHome() {
   const [todayRs, setTodayRs] = useState(0)
   const [currencyCode, setCurrencyCode] = useState<string | null>(null)
   const [tab, setTab] = useState<"home" | "earnings" | "referral">("home")
+  const [showLostFound, setShowLostFound] = useState(false)
 
   const [incoming, setIncoming] = useState<IncomingRequestSummary[]>([])
   const [dismissedIds, setDismissedIds] = useState<string[]>([])
@@ -300,7 +302,10 @@ export function DriverHome() {
                     {demandStatus === "red" ? "High demand nearby" : demandStatus === "yellow" ? "Moderate demand" : "Quiet right now"}
                   </div>
                 )}
-                <button className="flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow-rivo-sm">
+                <button
+                  onClick={() => setShowLostFound(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow-rivo-sm"
+                >
                   <Bell className="h-4 w-4" />
                 </button>
               </div>
@@ -424,6 +429,7 @@ export function DriverHome() {
             )}
           </>
         )}
+        {showLostFound && <LostFoundSheet onClose={() => setShowLostFound(false)} />}
       </div>
     </div>
   )

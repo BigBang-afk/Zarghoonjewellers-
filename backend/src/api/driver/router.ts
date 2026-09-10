@@ -17,6 +17,7 @@ import { recordFailure } from "../../services/observability.js"
 import { paymentRateLimit } from "../../middleware/rateLimit.js"
 import { roundMoney } from "../../utils/money.js"
 import { computeDemandGrid } from "../../services/demandMapService.js"
+import { driverRespondToLostItem, resolveLostItem } from "../../services/lostFoundService.js"
 
 export const driverRouter = Router()
 driverRouter.use(requireAuth, requireRole("driver"))
@@ -404,5 +405,39 @@ driverRouter.get(
     const driver = await getDriverProfileOrThrow(req.auth!.userId)
     const summary = await getDriverIncentiveSummary(driver.id)
     res.json(summary)
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Lost & found (Phase 5 §15)
+// ---------------------------------------------------------------------
+
+driverRouter.get(
+  "/me/lost-item-reports",
+  asyncHandler(async (req, res) => {
+    const reports = await prisma.lostItemReport.findMany({
+      where: { driverUserId: req.auth!.userId },
+      include: { reporter: { select: { fullName: true } }, ride: { select: { id: true, completedAt: true } } },
+      orderBy: { createdAt: "desc" },
+    })
+    res.json({ reports })
+  }),
+)
+
+driverRouter.post(
+  "/lost-item-reports/:id/respond",
+  validateBody(z.object({ found: z.boolean() })),
+  asyncHandler(async (req, res) => {
+    const report = await driverRespondToLostItem({ reportId: req.params.id, driverUserId: req.auth!.userId, found: req.body.found })
+    res.json({ report })
+  }),
+)
+
+driverRouter.post(
+  "/lost-item-reports/:id/resolve",
+  validateBody(z.object({ status: z.enum(["returned", "closed"]) })),
+  asyncHandler(async (req, res) => {
+    const report = await resolveLostItem({ reportId: req.params.id, actorUserId: req.auth!.userId, status: req.body.status })
+    res.json({ report })
   }),
 )

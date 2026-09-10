@@ -91,9 +91,9 @@ adminTrustRouter.post(
 adminTrustRouter.get(
   "/support-tickets",
   asyncHandler(async (req, res) => {
-    const { status, priority } = req.query as Record<string, string>
+    const { status, priority, category } = req.query as Record<string, string>
     const { take, skip, page } = pagination(req.query as Record<string, unknown>)
-    const where = { ...(status ? { status } : {}), ...(priority ? { priority } : {}) }
+    const where = { ...(status ? { status } : {}), ...(priority ? { priority } : {}), ...(category ? { category } : {}) }
     const [tickets, total] = await Promise.all([
       prisma.supportTicket.findMany({ where, include: { user: true, assignedAdmin: true, ride: true }, orderBy: { createdAt: "desc" }, take, skip }),
       prisma.supportTicket.count({ where }),
@@ -165,6 +165,52 @@ adminTrustRouter.post(
       await prisma.supportTicket.update({ where: { id: ticket.id }, data: { status: "in_progress" } })
     }
     res.status(201).json({ message })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Lost & found (Phase 5 §15) — the structured view; the underlying
+// message thread is the same SupportTicket every /support/tickets/:id
+// endpoint already serves, so admin uses that for replies.
+// ---------------------------------------------------------------------
+
+adminTrustRouter.get(
+  "/lost-item-reports",
+  asyncHandler(async (req, res) => {
+    const { status } = req.query as Record<string, string>
+    const { take, skip, page } = pagination(req.query as Record<string, unknown>)
+    const where = status ? { status } : {}
+    const [reports, total] = await Promise.all([
+      prisma.lostItemReport.findMany({
+        where,
+        include: {
+          reporter: { select: { fullName: true, phone: true } },
+          driver: { select: { fullName: true, phone: true } },
+          ticket: { select: { id: true, status: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take,
+        skip,
+      }),
+      prisma.lostItemReport.count({ where }),
+    ])
+    res.json({ reports, total, page, pageSize: take })
+  }),
+)
+
+adminTrustRouter.patch(
+  "/lost-item-reports/:id",
+  requireAdminRole("super_admin", "ops_manager", "support_agent"),
+  validateBody(z.object({ status: z.enum(["return_arranged", "returned", "closed"]) })),
+  asyncHandler(async (req, res) => {
+    const report = await prisma.lostItemReport.findUnique({ where: { id: req.params.id } })
+    if (!report) throw ApiError.notFound("Lost item report not found.")
+    const updated = await prisma.lostItemReport.update({
+      where: { id: report.id },
+      data: { status: req.body.status, resolvedAt: ["returned", "closed"].includes(req.body.status) ? new Date() : undefined },
+    })
+    await writeAuditLog({ req, action: "lost_item.update", targetTable: "lost_item_reports", targetId: report.id, before: report, after: req.body })
+    res.json({ report: updated })
   }),
 )
 

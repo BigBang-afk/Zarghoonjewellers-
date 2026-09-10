@@ -4,6 +4,8 @@ import type {
   CreateRideRequestResult,
   DriverOfferSummary,
   FareEstimate,
+  LostItemCategory,
+  LostItemReport,
   RideSummary,
 } from "../types"
 
@@ -59,4 +61,11 @@ export const ridesApi = {
 
   getMessages: (rideId: string) => api.get<{ messages: { id: string; senderId: string; body: string; createdAt: string }[] }>(`/rides/${rideId}/messages`),
   sendMessage: (rideId: string, body: string) => api.post<{ message: unknown }>(`/rides/${rideId}/messages`, { body }),
+
+  // Lost & found (passenger side)
+  reportLostItem: (rideId: string, itemCategory: LostItemCategory, itemDescription: string) =>
+    api.post<{ report: LostItemReport }>(`/rides/${rideId}/lost-item`, { itemCategory, itemDescription }),
+  myLostItemReports: () => api.get<{ reports: LostItemReport[] }>("/lost-item-reports"),
+  resolveLostItem: (reportId: string, status: "returned" | "closed") =>
+    api.post<{ report: LostItemReport }>(`/lost-item-reports/${reportId}/resolve`, { status }),
 }

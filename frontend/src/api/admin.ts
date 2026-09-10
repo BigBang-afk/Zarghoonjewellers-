@@ -1,5 +1,5 @@
 import { api } from "./client"
-import type { AdminKpis, City, DriverAcquisitionCampaign, DriverFunnelStage, DemandMap, DispatchAnalytics, CancellationAnalytics, Promotion, PromotionAnalytics, ServiceZone } from "../types"
+import type { AdminKpis, City, DriverAcquisitionCampaign, DriverFunnelStage, DemandMap, DispatchAnalytics, CancellationAnalytics, LostItemReport, Promotion, PromotionAnalytics, ServiceZone } from "../types"
 
 export const adminApi = {
   kpis: (cityId?: string) => api.get<AdminKpis>("/admin/dashboard/kpis", cityId ? { cityId } : undefined),
@@ -73,4 +73,8 @@ export const adminApi = {
     api.get<DispatchAnalytics>("/admin/dispatch/analytics", query),
   cancellationAnalytics: (query?: { from?: string; to?: string; cityId?: string }) =>
     api.get<CancellationAnalytics>("/admin/cancellations/analytics", query),
+  lostItemReports: (query?: { status?: string; page?: number; pageSize?: number }) =>
+    api.get<{ reports: LostItemReport[]; total: number }>("/admin/lost-item-reports", query),
+  updateLostItemReport: (id: string, status: "return_arranged" | "returned" | "closed") =>
+    api.patch<{ report: LostItemReport }>(`/admin/lost-item-reports/${id}`, { status }),
 }

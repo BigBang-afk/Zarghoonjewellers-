@@ -190,6 +190,8 @@ model User {
   supportTickets    SupportTicket[] @relation("TicketAuthor")
   assignedTickets   SupportTicket[] @relation("TicketAssignee")
   supportMessages   SupportMessage[]
+  reportedLostItems LostItemReport[] @relation("LostItemReporter")
+  lostItemsAsDriver LostItemReport[] @relation("LostItemDriver")
   safetyEvents      SafetyEvent[]
   wallet            Wallet?
   refreshTokens     RefreshToken[]
@@ -603,6 +605,7 @@ model Ride {
   safetyEvents  SafetyEvent[]
   disputes      Dispute[]
   supportTickets SupportTicket[]
+  lostItemReports LostItemReport[]
 
   @@index([passengerId, status])
   @@index([driverId, status])
@@ -925,6 +928,7 @@ model SupportTicket {
   ride                Ride?    @relation(fields: [rideId], references: [id])
   assignedAdmin       User?    @relation("TicketAssignee", fields: [assignedAdminId], references: [id])
   messages            SupportMessage[]
+  lostItemReport      LostItemReport?
 
   @@index([status, priority])
   @@map("support_tickets")
@@ -945,6 +949,37 @@ model SupportMessage {
 
   @@index([ticketId, createdAt])
   @@map("support_messages")
+}
+
+/// Phase 5 §15 — lost & found. One-to-one with a SupportTicket (category
+/// "lost_item"), which is reused as-is for the passenger<->driver message
+/// thread rather than building a parallel messaging system; this model
+/// carries the structured fields a generic ticket doesn't (item category/
+/// description, and a status a UI can render as a clear step, not just
+/// free text). status: LostItemStatus (reported | driver_confirmed_found |
+/// driver_confirmed_not_found | return_arranged | returned | closed).
+model LostItemReport {
+  id              String   @id @default(uuid())
+  ticketId        String   @unique
+  rideId          String
+  reporterUserId  String
+  driverUserId    String
+  itemCategory    String
+  itemDescription String
+  status          String   @default("reported")
+  foundAt         DateTime?
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id])
+  ride     Ride          @relation(fields: [rideId], references: [id])
+  reporter User          @relation("LostItemReporter", fields: [reporterUserId], references: [id])
+  driver   User          @relation("LostItemDriver", fields: [driverUserId], references: [id])
+
+  @@index([driverUserId, status])
+  @@index([reporterUserId])
+  @@map("lost_item_reports")
 }
 
 /// status: open | under_review | awaiting_info | resolved | rejected | closed

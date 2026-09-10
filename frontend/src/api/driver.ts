@@ -1,5 +1,5 @@
 import { api } from "./client"
-import type { DriverDocument, DriverEarningsSummary, DriverIncentiveSummary, IncomingRequestSummary, PayoutRequest, RideSummary } from "../types"
+import type { DriverDocument, DriverEarningsSummary, DriverIncentiveSummary, IncomingRequestSummary, LostItemReport, PayoutRequest, RideSummary } from "../types"
 
 export const driverApi = {
   me: () => api.get<{ driverProfile: Record<string, unknown> }>("/driver/me"),
@@ -22,4 +22,9 @@ export const driverApi = {
       "/driver/me/demand-map",
       range ? { range } : undefined,
     ),
+  lostItemReports: () => api.get<{ reports: LostItemReport[] }>("/driver/me/lost-item-reports"),
+  respondToLostItem: (reportId: string, found: boolean) =>
+    api.post<{ report: LostItemReport }>(`/driver/lost-item-reports/${reportId}/respond`, { found }),
+  resolveLostItem: (reportId: string, status: "returned" | "closed") =>
+    api.post<{ report: LostItemReport }>(`/driver/lost-item-reports/${reportId}/resolve`, { status }),
 }

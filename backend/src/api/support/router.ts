@@ -69,6 +69,19 @@ supportRouter.get(
   }),
 )
 
+/**
+ * A ticket is visible to its author as always, but a ticket linked to a
+ * ride (e.g. a lost-item report) is also visible to the *other* ride
+ * party — a driver needs to see and reply to a passenger's lost-item
+ * ticket even though the passenger filed it, and vice versa.
+ */
+async function isTicketAccessible(ticket: { userId: string; rideId: string | null }, userId: string): Promise<boolean> {
+  if (ticket.userId === userId) return true
+  if (!ticket.rideId) return false
+  const ride = await prisma.ride.findUnique({ where: { id: ticket.rideId }, include: { passenger: true, driver: true } })
+  return ride ? ride.passenger.userId === userId || ride.driver.userId === userId : false
+}
+
 supportRouter.get(
   "/tickets/:id",
   asyncHandler(async (req, res) => {
@@ -76,7 +89,7 @@ supportRouter.get(
       where: { id: req.params.id },
       select: { ...ticketAuthorSelect, ride: true, messages: { orderBy: { createdAt: "asc" }, include: { author: { select: { fullName: true } } } } },
     })
-    if (!ticket || ticket.userId !== req.auth!.userId) throw ApiError.notFound("Ticket not found.")
+    if (!ticket || !(await isTicketAccessible(ticket, req.auth!.userId))) throw ApiError.notFound("Ticket not found.")
     res.json({ ticket })
   }),
 )
@@ -87,7 +100,7 @@ supportRouter.post(
   validateBody(z.object({ body: z.string().trim().min(1).max(2000) })),
   asyncHandler(async (req, res) => {
     const ticket = await prisma.supportTicket.findUnique({ where: { id: req.params.id } })
-    if (!ticket || ticket.userId !== req.auth!.userId) throw ApiError.notFound("Ticket not found.")
+    if (!ticket || !(await isTicketAccessible(ticket, req.auth!.userId))) throw ApiError.notFound("Ticket not found.")
     if (ticket.status === "closed") throw ApiError.badRequest("TICKET_CLOSED", "This ticket is closed. Open a new one if you need further help.")
 
     const message = await prisma.supportMessage.create({

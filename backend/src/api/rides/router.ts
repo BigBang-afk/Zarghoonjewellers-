@@ -19,6 +19,8 @@ import {
 } from "../../services/negotiationEngine.js"
 import { selectOffer } from "../../services/bookingService.js"
 import { cancelRideRequest, updateRideStatus } from "../../services/rideLifecycleService.js"
+import { reportLostItem, resolveLostItem } from "../../services/lostFoundService.js"
+import { LostItemCategory } from "../../types/enums.js"
 import { submitRating } from "../../services/ratingService.js"
 import { notify } from "../../services/notifications/NotificationService.js"
 import { emitToRide } from "../../realtime/socket.js"
@@ -400,6 +402,48 @@ ridesRouter.get(
     assertRideParty(ride, req.auth!.userId, req.auth!.role)
     const disputes = await prisma.dispute.findMany({ where: { rideId: ride.id }, orderBy: { createdAt: "desc" } })
     res.json({ disputes })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Lost & found (Phase 5 §15) — passenger-facing side; driver's response
+// and the shared "resolve" action live under /driver (see driver/router.ts).
+// ---------------------------------------------------------------------
+
+ridesRouter.post(
+  "/rides/:id/lost-item",
+  requireRole("passenger"),
+  validateBody(z.object({ itemCategory: z.enum(LostItemCategory), itemDescription: z.string().trim().min(3).max(500) })),
+  asyncHandler(async (req, res) => {
+    const report = await reportLostItem({
+      rideId: req.params.id,
+      reporterUserId: req.auth!.userId,
+      itemCategory: req.body.itemCategory,
+      itemDescription: req.body.itemDescription,
+    })
+    res.status(201).json({ report })
+  }),
+)
+
+ridesRouter.get(
+  "/lost-item-reports",
+  asyncHandler(async (req, res) => {
+    const reports = await prisma.lostItemReport.findMany({
+      where: { reporterUserId: req.auth!.userId },
+      include: { driver: { select: { fullName: true } }, ride: { select: { id: true, completedAt: true } } },
+      orderBy: { createdAt: "desc" },
+    })
+    res.json({ reports })
+  }),
+)
+
+ridesRouter.post(
+  "/lost-item-reports/:id/resolve",
+  requireRole("passenger"),
+  validateBody(z.object({ status: z.enum(["returned", "closed"]) })),
+  asyncHandler(async (req, res) => {
+    const report = await resolveLostItem({ reportId: req.params.id, actorUserId: req.auth!.userId, status: req.body.status })
+    res.json({ report })
   }),
 )
 

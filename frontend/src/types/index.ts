@@ -319,6 +319,26 @@ export interface DemandMap {
   bounds?: { minLat: number; maxLat: number; minLng: number; maxLng: number }
 }
 
+export type LostItemCategory = "electronics" | "documents" | "bag_or_wallet" | "clothing" | "accessories" | "other"
+export type LostItemStatus = "reported" | "driver_confirmed_found" | "driver_confirmed_not_found" | "return_arranged" | "returned" | "closed"
+
+export interface LostItemReport {
+  id: string
+  ticketId: string
+  rideId: string
+  reporterUserId: string
+  driverUserId: string
+  itemCategory: LostItemCategory
+  itemDescription: string
+  status: LostItemStatus
+  foundAt: string | null
+  resolvedAt: string | null
+  createdAt: string
+  reporter?: { fullName: string }
+  driver?: { fullName: string }
+  ride?: { id: string; completedAt: string | null }
+}
+
 export interface DispatchAnalytics {
   range: { from: string; to: string }
   cityId: string | null

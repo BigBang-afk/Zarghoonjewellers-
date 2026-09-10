@@ -217,3 +217,24 @@ export type DriverCancellationReason = (typeof DriverCancellationReason)[number]
 /** Reasons attributable to the other party — never fee-eligible even when a cancellation policy is enabled. */
 export const EXEMPT_PASSENGER_CANCELLATION_REASONS: PassengerCancellationReason[] = ["driver_too_far", "driver_not_moving"]
 export const EXEMPT_DRIVER_CANCELLATION_REASONS: DriverCancellationReason[] = ["unsafe_pickup_location", "vehicle_issue"]
+
+// ---------------------------------------------------------------------
+// Phase 5 §15 — lost & found workflow
+// ---------------------------------------------------------------------
+
+export const LostItemCategory = ["electronics", "documents", "bag_or_wallet", "clothing", "accessories", "other"] as const
+export type LostItemCategory = (typeof LostItemCategory)[number]
+
+/// reported: passenger just filed it, driver not yet responded.
+/// driver_confirmed_found / driver_confirmed_not_found: driver's response.
+/// return_arranged: both sides agreed on how the item gets back.
+/// returned: passenger has the item back. closed: no further action (e.g. not found, given up).
+export const LostItemStatus = [
+  "reported",
+  "driver_confirmed_found",
+  "driver_confirmed_not_found",
+  "return_arranged",
+  "returned",
+  "closed",
+] as const
+export type LostItemStatus = (typeof LostItemStatus)[number]

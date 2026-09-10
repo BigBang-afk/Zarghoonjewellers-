@@ -1,7 +1,8 @@
 import { useState } from "react"
-import { Star, Heart } from "lucide-react"
+import { Star, Heart, PackageSearch } from "lucide-react"
 import { Card } from "../../components/ui/Card"
 import { Button } from "../../components/ui/Button"
+import { ReportLostItemSheet } from "../../components/ReportLostItemSheet"
 import { ridesApi } from "../../api/rides"
 import { passengerApi } from "../../api/passenger"
 import { useToast, errorMessage } from "../../shared/Toast"
@@ -21,6 +22,8 @@ export function RatingPanel({
   const [comment, setComment] = useState("")
   const [saveFavorite, setSaveFavorite] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [showLostItem, setShowLostItem] = useState(false)
+  const [reported, setReported] = useState(false)
   const { push } = useToast()
 
   async function submit() {
@@ -72,7 +75,22 @@ export function RatingPanel({
         <button onClick={onDone} className="mt-3 text-xs font-semibold text-ink-700/50">
           Skip for now
         </button>
+        <button
+          onClick={() => setShowLostItem(true)}
+          disabled={reported}
+          className="mt-4 flex w-full items-center justify-center gap-1.5 border-t border-ink-900/[0.06] pt-3 text-xs font-semibold text-ink-700/60 disabled:text-success-600"
+        >
+          <PackageSearch className="h-3.5 w-3.5" />
+          {reported ? "Lost item report sent" : "Left something in the car?"}
+        </button>
       </Card>
+      {showLostItem && (
+        <ReportLostItemSheet
+          rideId={rideId}
+          onClose={() => setShowLostItem(false)}
+          onReported={() => { setShowLostItem(false); setReported(true) }}
+        />
+      )}
     </div>
   )
 }
