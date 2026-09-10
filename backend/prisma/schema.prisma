@@ -65,6 +65,12 @@ model City {
   paymentMethods  String?
   /// JSON-encoded jurisdiction-specific driver requirements, e.g. {"minAge":21,"minLicenseYears":1,"requiredDocs":["national_id","driving_license"]}; never hard-coded in application code (Phase 4 §16)
   driverRequirements String?
+  /// JSON-encoded jurisdiction-specific passenger requirements, e.g. {"minAge":18,"requiredVerification":["phone"]}; enforced nowhere yet as hard business logic beyond phone verification, which already applies platform-wide — this is the config surface for a market that needs more (Phase 5 §1)
+  customerRequirements String?
+  /// Overrides the platform-wide matching.initialRadiusKm setting for this city's dispatch; null = use the platform default (Phase 5 §1)
+  searchRadiusKm  Float?
+  /// Default locale for a user whose primaryCityId is this city and who hasn't picked one themselves; null = platform default ("en")
+  defaultLanguage String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   deletedAt       DateTime?

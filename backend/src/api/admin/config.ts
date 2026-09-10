@@ -66,18 +66,31 @@ adminConfigRouter.patch(
         })
         .nullable()
         .optional(),
+      /** Admin-configurable per city (Phase 5 §1) — jurisdiction-specific passenger requirements */
+      customerRequirements: z
+        .object({
+          minAge: z.number().int().positive().optional(),
+          requiredVerification: z.array(z.string()).optional(),
+        })
+        .nullable()
+        .optional(),
+      /** Overrides matching.initialRadiusKm for this city; null = platform default (Phase 5 §1) */
+      searchRadiusKm: z.number().positive().nullable().optional(),
+      /** Default locale for users whose primaryCityId is this city and haven't chosen one (Phase 5 §3) */
+      defaultLanguage: z.string().trim().min(2).max(10).nullable().optional(),
     }),
   ),
   asyncHandler(async (req, res) => {
     const before = await prisma.city.findUnique({ where: { id: req.params.id } })
     if (!before) throw ApiError.notFound("City not found.")
-    const { paymentMethods, driverRequirements, ...rest } = req.body
+    const { paymentMethods, driverRequirements, customerRequirements, ...rest } = req.body
     const city = await prisma.city.update({
       where: { id: req.params.id },
       data: {
         ...rest,
         ...(paymentMethods !== undefined ? { paymentMethods: paymentMethods ? JSON.stringify(paymentMethods) : null } : {}),
         ...(driverRequirements !== undefined ? { driverRequirements: driverRequirements ? JSON.stringify(driverRequirements) : null } : {}),
+        ...(customerRequirements !== undefined ? { customerRequirements: customerRequirements ? JSON.stringify(customerRequirements) : null } : {}),
       },
     })
     await writeAuditLog({ req, action: "city.update", targetTable: "cities", targetId: city.id, before, after: req.body })

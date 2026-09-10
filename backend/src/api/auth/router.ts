@@ -183,6 +183,7 @@ authRouter.post(
         acquisitionSource,
         acquisitionCampaign,
         ...(marketingOptIn != null ? { marketingOptIn } : {}),
+        ...(city.defaultLanguage ? { locale: city.defaultLanguage } : {}),
         wallet: { create: { balance: 0, currencyCode: city.currencyCode } },
         driverProfile: {
           create: {

@@ -63,7 +63,7 @@ export async function findEligibleDrivers(params: {
   favoriteDriverIds?: string[]
   limit?: number
 }): Promise<{ candidates: MatchCandidate[]; radiusUsedKm: number; staleExcludedCount: number }> {
-  const [initialRadius, steps, maxRadius, stalenessMinutes, wEta, wAcceptance, wRating, wFairness, favoriteBoost] =
+  const [platformInitialRadius, steps, maxRadius, stalenessMinutes, wEta, wAcceptance, wRating, wFairness, favoriteBoost, city] =
     await Promise.all([
       getSetting("matching.initialRadiusKm"),
       getSetting("matching.radiusExpansionStepsKm"),
@@ -74,7 +74,13 @@ export async function findEligibleDrivers(params: {
       getSetting("matching.weightRating"),
       getSetting("matching.weightFairness"),
       getSetting("matching.favoriteDriverBoost"),
+      prisma.city.findUnique({ where: { id: params.cityId }, select: { searchRadiusKm: true } }),
     ])
+  // A city-specific search radius (Phase 5 §1) overrides the platform
+  // default's starting point, but never the platform's own safety
+  // ceiling — a city can search wider or narrower to start, not beyond
+  // maxRadiusKm.
+  const initialRadius = Math.min(city?.searchRadiusKm ?? platformInitialRadius, maxRadius)
 
   const radii = [initialRadius, ...steps].filter((r) => r <= maxRadius)
   if (radii[radii.length - 1] !== maxRadius) radii.push(maxRadius)
