@@ -7,6 +7,7 @@ import { requireAuth } from "../../middleware/auth.js"
 import { ApiError } from "../../utils/apiError.js"
 import { emitToAdmin } from "../../realtime/socket.js"
 import { SupportCategory } from "../../types/enums.js"
+import { chatRateLimit } from "../../middleware/rateLimit.js"
 
 /**
  * Support Center (Phase 3 §18) — any authenticated user (passenger or
@@ -82,6 +83,7 @@ supportRouter.get(
 
 supportRouter.post(
   "/tickets/:id/messages",
+  chatRateLimit,
   validateBody(z.object({ body: z.string().trim().min(1).max(2000) })),
   asyncHandler(async (req, res) => {
     const ticket = await prisma.supportTicket.findUnique({ where: { id: req.params.id } })

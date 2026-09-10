@@ -5,7 +5,7 @@ import { ApiError } from "../../utils/apiError.js"
 import { asyncHandler } from "../../utils/asyncHandler.js"
 import { validateBody } from "../../middleware/validate.js"
 import { requireAuth, requireRole } from "../../middleware/auth.js"
-import { rideRequestRateLimit } from "../../middleware/rateLimit.js"
+import { rideRequestRateLimit, offerActionRateLimit, chatRateLimit } from "../../middleware/rateLimit.js"
 import { getPassengerProfileOrThrow, getDriverProfileOrThrow } from "../../shared/profileLookup.js"
 import { createRideRequest } from "../../services/rideRequestService.js"
 import { computeFare } from "../../services/fareEngine.js"
@@ -199,6 +199,7 @@ ridesRouter.post(
 ridesRouter.post(
   "/ride-offers/:id/accept",
   requireRole("driver"),
+  offerActionRateLimit,
   asyncHandler(async (req, res) => {
     const driver = await getDriverProfileOrThrow(req.auth!.userId)
     const result = await driverAcceptOffer(req.params.id, driver.id)
@@ -209,6 +210,7 @@ ridesRouter.post(
 ridesRouter.post(
   "/ride-offers/:id/counter",
   requireRole("driver"),
+  offerActionRateLimit,
   validateBody(z.object({ counterPrice: z.number().positive() })),
   asyncHandler(async (req, res) => {
     const driver = await getDriverProfileOrThrow(req.auth!.userId)
@@ -220,6 +222,7 @@ ridesRouter.post(
 ridesRouter.post(
   "/ride-offers/:id/decline",
   requireRole("driver"),
+  offerActionRateLimit,
   asyncHandler(async (req, res) => {
     const driver = await getDriverProfileOrThrow(req.auth!.userId)
     const result = await driverDeclineOffer(req.params.id, driver.id)
@@ -234,6 +237,7 @@ ridesRouter.post(
 ridesRouter.post(
   "/counter-offers/:id/accept",
   requireRole("passenger"),
+  offerActionRateLimit,
   asyncHandler(async (req, res) => {
     const passenger = await getPassengerProfileOrThrow(req.auth!.userId)
     const ride = await passengerAcceptCounterOffer(req.params.id, passenger.id)
@@ -244,6 +248,7 @@ ridesRouter.post(
 ridesRouter.post(
   "/counter-offers/:id/reject",
   requireRole("passenger"),
+  offerActionRateLimit,
   asyncHandler(async (req, res) => {
     const passenger = await getPassengerProfileOrThrow(req.auth!.userId)
     const result = await passengerRejectCounterOffer(req.params.id, passenger.id)
@@ -405,6 +410,7 @@ ridesRouter.get(
 
 ridesRouter.post(
   "/rides/:id/messages",
+  chatRateLimit,
   validateBody(z.object({ body: z.string().trim().min(1).max(1000) })),
   asyncHandler(async (req, res) => {
     const ride = await serializeRide(req.params.id)

@@ -58,6 +58,22 @@ export interface PlatformSettingsShape {
   // provider class is registered in services/maps/; §7 — dispatch retry cap
   "maps.poorAccuracyThresholdM": number
   "matching.maxDispatchHops": number
+
+  // Phase 4 §27 — per-category rate limits (window in seconds, cap per
+  // window per client IP). Login/OTP already had a dedicated limiter from
+  // Phase 1; these round out the rest of the abuse surface named in the
+  // spec: offer/counter-offer actions, ride chat, referral redemption,
+  // promo-code validation, and self-service wallet top-up.
+  "rateLimit.offerAction.windowSec": number
+  "rateLimit.offerAction.limit": number
+  "rateLimit.chat.windowSec": number
+  "rateLimit.chat.limit": number
+  "rateLimit.referral.windowSec": number
+  "rateLimit.referral.limit": number
+  "rateLimit.promoRedemption.windowSec": number
+  "rateLimit.promoRedemption.limit": number
+  "rateLimit.payment.windowSec": number
+  "rateLimit.payment.limit": number
 }
 
 const DEFAULTS: PlatformSettingsShape = {
@@ -98,6 +114,17 @@ const DEFAULTS: PlatformSettingsShape = {
 
   "maps.poorAccuracyThresholdM": 100,
   "matching.maxDispatchHops": 5,
+
+  "rateLimit.offerAction.windowSec": 60,
+  "rateLimit.offerAction.limit": 20,
+  "rateLimit.chat.windowSec": 60,
+  "rateLimit.chat.limit": 30,
+  "rateLimit.referral.windowSec": 3600,
+  "rateLimit.referral.limit": 5,
+  "rateLimit.promoRedemption.windowSec": 300,
+  "rateLimit.promoRedemption.limit": 10,
+  "rateLimit.payment.windowSec": 300,
+  "rateLimit.payment.limit": 10,
 }
 
 const CACHE_TTL_MS = 5_000

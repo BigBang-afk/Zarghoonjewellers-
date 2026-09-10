@@ -7,6 +7,7 @@ import { requireAuth } from "../../middleware/auth.js"
 import { applyReferralCode } from "../../services/referralService.js"
 import { NotificationType } from "../../types/enums.js"
 import { ApiError } from "../../utils/apiError.js"
+import { referralRateLimit } from "../../middleware/rateLimit.js"
 
 /** Cross-role account endpoints (referrals, notification preferences) — Phase 2 §11 / §20. */
 export const accountRouter = Router()
@@ -42,6 +43,7 @@ accountRouter.get(
 
 accountRouter.post(
   "/referral/apply",
+  referralRateLimit,
   validateBody(z.object({ code: z.string().trim().min(1).max(20) })),
   asyncHandler(async (req, res) => {
     await applyReferralCode(req.auth!.userId, req.body.code)

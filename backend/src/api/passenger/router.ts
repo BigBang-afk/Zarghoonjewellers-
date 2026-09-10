@@ -12,6 +12,7 @@ import { createScheduledRide, cancelScheduledRide, rescheduleRide } from "../../
 import { resolveUserCurrency } from "../../shared/currency.js"
 import { roundMoney } from "../../utils/money.js"
 import { mapProvider } from "../../services/maps/HaversineMapProvider.js"
+import { paymentRateLimit, promoRedemptionRateLimit } from "../../middleware/rateLimit.js"
 
 export const passengerRouter = Router()
 passengerRouter.use(requireAuth, requireRole("passenger"))
@@ -149,6 +150,7 @@ passengerRouter.get(
 
 passengerRouter.post(
   "/wallet/topup",
+  paymentRateLimit,
   validateBody(z.object({ amount: z.number().positive().max(100_000), method: z.enum(["card", "local_provider"]).default("card") })),
   asyncHandler(async (req, res) => {
     const provider = getPaymentProvider(req.body.method)
@@ -185,6 +187,7 @@ passengerRouter.post(
 
 passengerRouter.post(
   "/promo/validate",
+  promoRedemptionRateLimit,
   validateBody(z.object({ code: z.string().trim().min(1).max(20), cityId: z.string().uuid(), vehicleTypeId: z.string().uuid(), fareAmount: z.number().positive() })),
   asyncHandler(async (req, res) => {
     const passenger = await getPassengerProfileOrThrow(req.auth!.userId)
