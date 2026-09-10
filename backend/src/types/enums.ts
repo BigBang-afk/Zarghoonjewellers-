@@ -164,7 +164,8 @@ export type ReferralStatus = (typeof ReferralStatus)[number]
 export const ScheduledRideStatus = ["scheduled", "dispatched", "completed", "cancelled", "expired"] as const
 export type ScheduledRideStatus = (typeof ScheduledRideStatus)[number]
 
-export const BusinessEmployeeRole = ["owner", "member"] as const
+/// owner: full control incl. ride policy + admins. admin: manages employees, can't remove the owner. member: books rides (Phase 4 §13's EMPLOYEE).
+export const BusinessEmployeeRole = ["owner", "admin", "member"] as const
 export type BusinessEmployeeRole = (typeof BusinessEmployeeRole)[number]
 
 export const RiskEventType = [

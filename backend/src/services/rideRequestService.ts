@@ -6,6 +6,7 @@ import { computeFare, assertFareWithinGuardrails } from "./fareEngine.js"
 import { findEligibleDrivers } from "./matchingEngine.js"
 import { validatePromoCode, recordPromoRedemption } from "./promoService.js"
 import { getMutuallyBlockedUserIds } from "./safetyService.js"
+import { enforceBusinessRidePolicy } from "./businessService.js"
 import { notify } from "./notifications/NotificationService.js"
 import { emitToUser, emitToAdmin } from "../realtime/socket.js"
 import type { BookingMode, PaymentMethod } from "../types/enums.js"
@@ -54,6 +55,15 @@ export async function createRideRequest(input: CreateRideRequestInput) {
   if (input.bookingMode === "competitive_offer" && input.proposedFare != null) {
     assertFareWithinGuardrails(input.proposedFare, fare)
     proposedFare = input.proposedFare
+  }
+
+  if (input.businessAccountId) {
+    await enforceBusinessRidePolicy({
+      businessAccountId: input.businessAccountId,
+      vehicleTypeId: input.vehicleTypeId,
+      zoneId: input.zoneId,
+      fareRs: proposedFare,
+    })
   }
 
   let promoResult: { promotionId: string; discountAmount: number } | null = null

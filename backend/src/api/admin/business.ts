@@ -6,6 +6,7 @@ import { validateBody } from "../../middleware/validate.js"
 import { requireAdminRole } from "../../middleware/auth.js"
 import { ApiError } from "../../utils/apiError.js"
 import { writeAuditLog } from "../../shared/audit.js"
+import { parseRidePolicy } from "../../services/businessService.js"
 
 /**
  * Business / corporate accounts (Phase 2 §14) — architecture only, no
@@ -45,10 +46,51 @@ adminBusinessRouter.post(
   }),
 )
 
+adminBusinessRouter.patch(
+  "/business-accounts/:id",
+  requireAdminRole("super_admin", "ops_manager", "finance"),
+  validateBody(
+    z.object({
+      isActive: z.boolean().optional(),
+      monthlySpendLimit: z.number().positive().nullable().optional(),
+      ridePolicy: z
+        .object({
+          maxRideAmount: z.number().positive().optional(),
+          allowedVehicleTypeIds: z.array(z.string().uuid()).optional(),
+          allowedZoneIds: z.array(z.string().uuid()).optional(),
+        })
+        .optional(),
+    }),
+  ),
+  asyncHandler(async (req, res) => {
+    const existing = await prisma.businessAccount.findUnique({ where: { id: req.params.id } })
+    if (!existing) throw ApiError.notFound("Business account not found.")
+
+    const { ridePolicy, ...rest } = req.body as {
+      isActive?: boolean
+      monthlySpendLimit?: number | null
+      ridePolicy?: unknown
+    }
+    const account = await prisma.businessAccount.update({
+      where: { id: req.params.id },
+      data: { ...rest, ...(ridePolicy !== undefined ? { ridePolicy: JSON.stringify(ridePolicy) } : {}) },
+    })
+    await writeAuditLog({
+      req,
+      action: "business_account.update",
+      targetTable: "business_accounts",
+      targetId: account.id,
+      before: { isActive: existing.isActive, monthlySpendLimit: existing.monthlySpendLimit, ridePolicy: parseRidePolicy(existing.ridePolicy) },
+      after: req.body,
+    })
+    res.json({ account: { ...account, ridePolicy: parseRidePolicy(account.ridePolicy) } })
+  }),
+)
+
 adminBusinessRouter.post(
   "/business-accounts/:id/employees",
   requireAdminRole("super_admin", "ops_manager", "finance"),
-  validateBody(z.object({ userId: z.string().uuid(), role: z.enum(["owner", "member"]).default("member") })),
+  validateBody(z.object({ userId: z.string().uuid(), role: z.enum(["owner", "admin", "member"]).default("member") })),
   asyncHandler(async (req, res) => {
     const account = await prisma.businessAccount.findUnique({ where: { id: req.params.id } })
     if (!account) throw ApiError.notFound("Business account not found.")
