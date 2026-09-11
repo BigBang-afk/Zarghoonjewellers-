@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: rivo-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build && npx prisma generate && npx prisma migrate deploy && npm run seed
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        value: file:./dev.db
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: PAYMENTS_PROVIDER_WEBHOOK_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: "*"
+      - key: MOCK_OTP
+        value: "true"
+      - key: MOCK_PAYMENTS
+        value: "true"
+      - key: MOCK_NOTIFICATIONS
+        value: "true"
