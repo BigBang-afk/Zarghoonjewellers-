@@ -21,6 +21,8 @@ import type {
   PartnerDetail,
   PartnerPayout,
   FeatureFlag,
+  Experiment,
+  ExperimentResult,
   Promotion,
   PromotionAnalytics,
   ServiceZone,
@@ -186,4 +188,29 @@ export const adminApi = {
   updateFeatureFlag: (id: string, data: Partial<{ name: string; description: string; isEnabled: boolean; rolloutPct: number; targetRole: string; cityIds: string[] }>) =>
     api.patch<{ flag: FeatureFlag }>(`/admin/feature-flags/${id}`, data),
   deleteFeatureFlag: (id: string) => api.delete<void>(`/admin/feature-flags/${id}`),
+
+  // A/B testing (Phase 5 §22)
+  experiments: () => api.get<{ experiments: Experiment[] }>("/admin/experiments"),
+  experimentDetail: (id: string) =>
+    api.get<{ experiment: Experiment; results: ExperimentResult[]; totalAssigned: number }>(`/admin/experiments/${id}`),
+  createExperiment: (data: {
+    key: string
+    name: string
+    description?: string
+    variants: { key: string; name: string; weight: number }[]
+    targetRole?: "all" | "passenger" | "driver"
+    cityIds?: string[]
+  }) => api.post<{ experiment: Experiment }>("/admin/experiments", data),
+  updateExperiment: (
+    id: string,
+    data: Partial<{
+      name: string
+      description: string
+      status: "draft" | "running" | "completed"
+      targetRole: string
+      cityIds: string[]
+      variants: { key: string; name: string; weight: number }[]
+    }>,
+  ) => api.patch<{ experiment: Experiment }>(`/admin/experiments/${id}`, data),
+  deleteExperiment: (id: string) => api.delete<void>(`/admin/experiments/${id}`),
 }

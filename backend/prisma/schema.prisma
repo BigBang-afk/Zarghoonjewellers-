@@ -226,6 +226,7 @@ model User {
   assignedSafetyEvents SafetyEvent[] @relation("SafetyEventAssignee")
   contentItemsCreated ContentItem[]
   retentionNotifications RetentionNotificationLog[]
+  experimentAssignments ExperimentAssignment[]
 
   @@index([role, status])
   @@index([deletionRequestedAt])
@@ -470,6 +471,46 @@ model FeatureFlag {
   updatedAt   DateTime @updatedAt
 
   @@map("feature_flags")
+}
+
+/// Phase 5 §22 — A/B testing foundation. Distinct from FeatureFlag:
+/// experiments are multi-variant (not just on/off), and assignment is
+/// *sticky* (persisted in ExperimentAssignment on first evaluation, not
+/// re-rolled on every check) — the whole point of a real A/B test is
+/// that a given user keeps seeing the same variant for the life of the
+/// experiment, even if variant weights change afterward.
+/// status: draft | running | completed
+model Experiment {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  /// JSON array of {key, name, weight} — weights must sum to 100.
+  variants    String
+  status      String   @default("draft")
+  targetRole  String   @default("all")
+  cityIds     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assignments ExperimentAssignment[]
+
+  @@map("experiments")
+}
+
+model ExperimentAssignment {
+  id           String   @id @default(uuid())
+  experimentId String
+  userId       String
+  variantKey   String
+  assignedAt   DateTime @default(now())
+
+  experiment   Experiment @relation(fields: [experimentId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+
+  @@unique([experimentId, userId])
+  @@index([experimentId, variantKey])
+  @@map("experiment_assignments")
 }
 
 // ---------------------------------------------------------------------

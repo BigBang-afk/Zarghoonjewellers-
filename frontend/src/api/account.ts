@@ -6,4 +6,5 @@ export const accountApi = {
   referral: () => api.get<ReferralSummary>("/account/referral"),
   applyReferralCode: (code: string) => api.post<{ ok: boolean }>("/account/referral/apply", { code }),
   featureFlags: () => api.get<{ flags: Record<string, boolean> }>("/account/feature-flags"),
+  experiments: () => api.get<{ assignments: Record<string, string> }>("/account/experiments"),
 }

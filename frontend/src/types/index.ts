@@ -445,6 +445,30 @@ export interface FeatureFlag {
   updatedAt: string
 }
 
+export interface ExperimentVariant {
+  key: string
+  name: string
+  weight: number
+}
+
+export interface Experiment {
+  id: string
+  key: string
+  name: string
+  description: string | null
+  variants: ExperimentVariant[]
+  status: "draft" | "running" | "completed"
+  targetRole: "all" | "passenger" | "driver"
+  cityIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ExperimentResult {
+  variantKey: string
+  assignedCount: number
+}
+
 export interface Partner {
   id: string
   name: string

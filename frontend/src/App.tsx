@@ -9,6 +9,7 @@ import { RegisterDriver } from "./pages/auth/RegisterDriver"
 import { Logo } from "./components/Logo"
 import { AuthProvider, useAuth } from "./auth/AuthContext"
 import { FeatureFlagsProvider } from "./featureFlags/FeatureFlagsContext"
+import { ExperimentsProvider } from "./experiments/ExperimentsContext"
 import { ProtectedRoute } from "./auth/ProtectedRoute"
 import { ToastProvider } from "./shared/Toast"
 import { LocaleProvider } from "./i18n"
@@ -104,9 +105,11 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <FeatureFlagsProvider>
-            <Router>
-              <AppRoutes />
-            </Router>
+            <ExperimentsProvider>
+              <Router>
+                <AppRoutes />
+              </Router>
+            </ExperimentsProvider>
           </FeatureFlagsProvider>
         </AuthProvider>
       </ToastProvider>
