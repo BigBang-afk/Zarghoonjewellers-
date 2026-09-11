@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   LifeBuoy,
   MapPinned,
+  Megaphone,
   PackageSearch,
   Percent,
   Route,
@@ -55,6 +56,7 @@ import { LostFoundPanel } from "./LostFoundPanel"
 import { BusinessAccountsPanel } from "./BusinessAccountsPanel"
 import { FleetAccountsPanel } from "./FleetAccountsPanel"
 import { PlatformAnalyticsPanel } from "./PlatformAnalyticsPanel"
+import { MarketingCampaignsPanel } from "./MarketingCampaignsPanel"
 
 const nav = [
   {
@@ -87,6 +89,7 @@ const nav = [
       { label: "Payments", icon: Wallet },
       { label: "Commissions", icon: Percent },
       { label: "Promotions", icon: Tag },
+      { label: "Marketing Campaigns", icon: Megaphone },
     ],
   },
   {
@@ -127,7 +130,7 @@ const nav = [
   },
 ]
 
-const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Lost & Found", "Business Accounts", "Fleet Accounts", "Analytics", "Passengers", "Drivers", "Ride Requests"])
+const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Marketing Campaigns", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Lost & Found", "Business Accounts", "Fleet Accounts", "Analytics", "Passengers", "Drivers", "Ride Requests"])
 
 export function AdminDashboard() {
   const { user } = useAuth()
@@ -224,6 +227,8 @@ export function AdminDashboard() {
             <DriverAcquisitionPanel />
           ) : active === "Promotions" ? (
             <PromotionsPanel />
+          ) : active === "Marketing Campaigns" ? (
+            <MarketingCampaignsPanel />
           ) : active === "Demand Heat Map" ? (
             <HeatMapPanel />
           ) : active === "Dispatch Performance" ? (

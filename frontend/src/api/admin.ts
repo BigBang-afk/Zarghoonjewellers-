@@ -16,6 +16,7 @@ import type {
   PassengerAnalytics,
   DriverAnalytics,
   MarketplaceAnalytics,
+  MarketingCampaign,
   Promotion,
   PromotionAnalytics,
   ServiceZone,
@@ -122,4 +123,28 @@ export const adminApi = {
   passengerAnalytics: (cityId?: string) => api.get<PassengerAnalytics>("/admin/analytics/passengers", cityId ? { cityId } : undefined),
   driverAnalytics: (cityId?: string) => api.get<DriverAnalytics>("/admin/analytics/drivers", cityId ? { cityId } : undefined),
   marketplaceAnalytics: (cityId?: string) => api.get<MarketplaceAnalytics>("/admin/analytics/marketplace", cityId ? { cityId } : undefined),
+
+  // Marketing campaigns (Phase 5 §18)
+  campaigns: (status?: string) => api.get<{ campaigns: MarketingCampaign[] }>("/admin/campaigns", status ? { status } : undefined),
+  createCampaign: (data: {
+    name: string
+    title: string
+    body: string
+    targetRole: "passenger" | "driver"
+    cityId?: string
+    minDaysSinceLastRide?: number
+    maxCompletedRides?: number
+    acquisitionSource?: string
+    promoCode?: string
+    scheduledAt?: string
+  }) => api.post<{ campaign: MarketingCampaign }>("/admin/campaigns", data),
+  previewCampaignAudience: (segment: {
+    targetRole: "passenger" | "driver"
+    cityId?: string
+    minDaysSinceLastRide?: number
+    maxCompletedRides?: number
+    acquisitionSource?: string
+  }) => api.post<{ recipientCount: number }>("/admin/campaigns/preview-audience", segment),
+  sendCampaign: (id: string) => api.post<{ campaign: MarketingCampaign }>(`/admin/campaigns/${id}/send`),
+  cancelCampaign: (id: string) => api.post<{ campaign: MarketingCampaign }>(`/admin/campaigns/${id}/cancel`),
 }

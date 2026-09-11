@@ -89,6 +89,7 @@ model City {
   contentItems    ContentItem[]
   driverAcquisitionCampaigns DriverAcquisitionCampaign[]
   fleetAccounts   FleetAccount[]
+  marketingCampaigns MarketingCampaign[]
 
   @@unique([countryId, name])
   @@index([status])
@@ -218,6 +219,7 @@ model User {
   businessEmployeeOf BusinessEmployee[]
   billingContactFor BusinessAccount[] @relation("BusinessBillingContact")
   ownedFleetAccounts FleetAccount[] @relation("FleetOwner")
+  marketingCampaignsCreated MarketingCampaign[]
   assignedSafetyEvents SafetyEvent[] @relation("SafetyEventAssignee")
   contentItemsCreated ContentItem[]
   retentionNotifications RetentionNotificationLog[]
@@ -1626,6 +1628,43 @@ model WaitlistEntry {
 
   @@index([cityName, userType])
   @@map("waitlist_entries")
+}
+
+// ---------------------------------------------------------------------
+// Marketing campaigns (Phase 5 §18) — an admin-authored, targeted
+// broadcast, distinct from the static Marketing CMS above (ContentItem)
+// and from the automated lifecycle nudges in retentionService.ts.
+// Delivery reuses the existing NotificationService (never a parallel
+// send pipeline), and only ever reaches users with marketingOptIn=true —
+// enforced in the service, not just documented here.
+// ---------------------------------------------------------------------
+
+/// status: draft | scheduled | sent | cancelled
+model MarketingCampaign {
+  id              String    @id @default(uuid())
+  name            String
+  title           String
+  body            String
+  /// role: "passenger" | "driver" — segments differ meaningfully per role (completedRides means different things), so a campaign targets one.
+  targetRole      String
+  cityId          String?
+  minDaysSinceLastRide Int?
+  maxCompletedRides    Int?
+  acquisitionSource    String?
+  promoCode       String?
+  status          String    @default("draft")
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  recipientCount  Int       @default(0)
+  createdById     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  city            City?     @relation(fields: [cityId], references: [id])
+  createdBy       User      @relation(fields: [createdById], references: [id])
+
+  @@index([status, scheduledAt])
+  @@map("marketing_campaigns")
 }
 
 // ---------------------------------------------------------------------

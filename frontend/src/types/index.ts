@@ -432,6 +432,26 @@ export interface MarketplaceAnalytics {
   ridesByPaymentMethod: { paymentMethod: string; count: number }[]
 }
 
+export interface MarketingCampaign {
+  id: string
+  name: string
+  title: string
+  body: string
+  targetRole: "passenger" | "driver"
+  cityId: string | null
+  minDaysSinceLastRide: number | null
+  maxCompletedRides: number | null
+  acquisitionSource: string | null
+  promoCode: string | null
+  status: "draft" | "scheduled" | "sent" | "cancelled"
+  scheduledAt: string | null
+  sentAt: string | null
+  recipientCount: number
+  createdAt: string
+  city?: { name: string } | null
+  createdBy?: { fullName: string }
+}
+
 export interface DispatchAnalytics {
   range: { from: string; to: string }
   cityId: string | null

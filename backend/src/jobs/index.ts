@@ -5,6 +5,7 @@ import { sweepDocumentExpirations } from "../services/verificationService.js"
 import { reconcileStuckPayments } from "./paymentReconciliationJob.js"
 import { runCleanupSweep } from "./cleanupJob.js"
 import { runRetentionSweep } from "../services/retentionService.js"
+import { dispatchDueMarketingCampaigns } from "../services/marketingCampaignService.js"
 
 /**
  * Every recurring background job (Phase 4 §28), started once from
@@ -37,4 +38,9 @@ export function startBackgroundJobs(): void {
   // Days-scale thresholds, so hourly is plenty frequent; the per-campaign
   // cooldown (not this interval) is what actually controls resend cadence.
   registerJob({ name: "retention_sweep", intervalMs: 60 * 60_000, handler: runRetentionSweep })
+
+  // Marketing campaign scheduling (Phase 5 §18) — a scheduled send is
+  // rarely more than minutes off its target time, so check every minute
+  // like the other minute-scale dispatch job above.
+  registerJob({ name: "marketing_campaign_dispatch", intervalMs: 60_000, handler: dispatchDueMarketingCampaigns })
 }
