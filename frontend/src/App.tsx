@@ -8,6 +8,7 @@ import { RegisterPassenger } from "./pages/auth/RegisterPassenger"
 import { RegisterDriver } from "./pages/auth/RegisterDriver"
 import { Logo } from "./components/Logo"
 import { AuthProvider, useAuth } from "./auth/AuthContext"
+import { FeatureFlagsProvider } from "./featureFlags/FeatureFlagsContext"
 import { ProtectedRoute } from "./auth/ProtectedRoute"
 import { ToastProvider } from "./shared/Toast"
 import { LocaleProvider } from "./i18n"
@@ -102,9 +103,11 @@ export default function App() {
     <LocaleProvider>
       <ToastProvider>
         <AuthProvider>
-          <Router>
-            <AppRoutes />
-          </Router>
+          <FeatureFlagsProvider>
+            <Router>
+              <AppRoutes />
+            </Router>
+          </FeatureFlagsProvider>
         </AuthProvider>
       </ToastProvider>
     </LocaleProvider>

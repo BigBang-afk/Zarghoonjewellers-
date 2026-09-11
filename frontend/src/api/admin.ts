@@ -20,6 +20,7 @@ import type {
   Partner,
   PartnerDetail,
   PartnerPayout,
+  FeatureFlag,
   Promotion,
   PromotionAnalytics,
   ServiceZone,
@@ -170,4 +171,19 @@ export const adminApi = {
     api.post<{ payout: PartnerPayout }>(`/admin/partners/${id}/payouts`, data),
   generatePartnerApiKey: (id: string) => api.post<{ apiKey: string }>(`/admin/partners/${id}/api-key/generate`),
   revokePartnerApiKey: (id: string) => api.post<void>(`/admin/partners/${id}/api-key/revoke`),
+
+  // Feature flags (Phase 5 §21)
+  featureFlags: () => api.get<{ flags: FeatureFlag[] }>("/admin/feature-flags"),
+  createFeatureFlag: (data: {
+    key: string
+    name: string
+    description?: string
+    isEnabled?: boolean
+    rolloutPct?: number
+    targetRole?: "all" | "passenger" | "driver"
+    cityIds?: string[]
+  }) => api.post<{ flag: FeatureFlag }>("/admin/feature-flags", data),
+  updateFeatureFlag: (id: string, data: Partial<{ name: string; description: string; isEnabled: boolean; rolloutPct: number; targetRole: string; cityIds: string[] }>) =>
+    api.patch<{ flag: FeatureFlag }>(`/admin/feature-flags/${id}`, data),
+  deleteFeatureFlag: (id: string) => api.delete<void>(`/admin/feature-flags/${id}`),
 }

@@ -449,6 +449,29 @@ model PlatformSetting {
   @@map("platform_settings")
 }
 
+/// Phase 5 §21 — feature flags. Distinct from PlatformSetting (which
+/// tunes a numeric/string value everyone gets); a flag is a boolean gate
+/// that can additionally be scoped to a role and/or a percentage rollout,
+/// evaluated per-user (see featureFlagService.ts). targetRole: "all" |
+/// "passenger" | "driver". cityIds is a JSON-encoded array of City ids —
+/// null/empty means "all cities".
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  isEnabled   Boolean  @default(false)
+  /// 0-100. Only consulted when isEnabled is true; 100 means everyone who
+  /// otherwise matches (role/city) sees it.
+  rolloutPct  Int      @default(100)
+  targetRole  String   @default("all")
+  cityIds     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("feature_flags")
+}
+
 // ---------------------------------------------------------------------
 // Ride requests, offers, counter-offers — the marketplace core
 // ---------------------------------------------------------------------

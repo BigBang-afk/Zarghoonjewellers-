@@ -432,6 +432,19 @@ export interface MarketplaceAnalytics {
   ridesByPaymentMethod: { paymentMethod: string; count: number }[]
 }
 
+export interface FeatureFlag {
+  id: string
+  key: string
+  name: string
+  description: string | null
+  isEnabled: boolean
+  rolloutPct: number
+  targetRole: "all" | "passenger" | "driver"
+  cityIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Partner {
   id: string
   name: string

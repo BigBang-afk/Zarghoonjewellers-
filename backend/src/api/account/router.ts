@@ -9,10 +9,21 @@ import { resolveUserCurrency } from "../../shared/currency.js"
 import { NotificationType } from "../../types/enums.js"
 import { ApiError } from "../../utils/apiError.js"
 import { referralRateLimit } from "../../middleware/rateLimit.js"
+import { evaluateAllFlagsForUser } from "../../services/featureFlagService.js"
 
 /** Cross-role account endpoints (referrals, notification preferences) — Phase 2 §11 / §20. */
 export const accountRouter = Router()
 accountRouter.use(requireAuth)
+
+accountRouter.get(
+  "/feature-flags",
+  asyncHandler(async (req, res) => {
+    if (req.auth!.role === "admin") return res.json({ flags: {} })
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.auth!.userId }, select: { primaryCityId: true } })
+    const flags = await evaluateAllFlagsForUser({ userId: req.auth!.userId, role: req.auth!.role, cityId: user.primaryCityId })
+    res.json({ flags })
+  }),
+)
 
 accountRouter.get(
   "/referral",
