@@ -80,13 +80,49 @@ to check later.
   serialization (`utils/logger.ts`), so instrumentation can be added
   liberally without a second pass to check for leaked secrets.
 
-## 6. What real load testing would need to validate these
+## 6. Load testing foundation (Phase 5 §26)
 
-Not done here, listed honestly as the next step: a tool like k6 or
-Artillery driving realistic traffic (a ride-request rate, a mix of
-Quick Match / Competitive Offer, concurrent driver location updates)
-against a staging environment provisioned like production (real
-Postgres, not the SQLite dev database), reading the results off
-`GET /v1/admin/observability` and the database's own query-performance
-tooling. That's Phase 5 (or later pilot-hardening) scope, not something
-a documentation pass can substitute for.
+`backend/scripts/load-test.mjs` (`npm run load-test` from `backend/`) is
+the tool this section used to defer. It drives paced, weighted traffic
+against a running instance across three safe-to-repeat scenarios (an
+unauthenticated read, a passenger fare estimate — pure computation, no
+DB row created — and an admin dashboard read), then reads back
+`GET /v1/admin/observability` so client-observed and server-observed
+latency can be cross-checked against each other.
+
+**This is a dev-sandbox regression tool, not the real capacity test.**
+A real pre-launch capacity test still needs k6 or Artillery against a
+staging environment provisioned like production (real Postgres, not
+SQLite, and enough concurrent virtual users to actually saturate it) —
+that's still true and still not done here. What changed is that a
+same-process, day-to-day tool now exists so a regression doesn't have to
+wait for that staging setup to be noticed.
+
+One real run against the local dev server (SQLite, single container,
+seeded demo data, 5 concurrent workers paced to 4 req/s for 20s, zero
+errors and zero rate-limit rejections) is on record — labeled as exactly
+that, a dev-sandbox sanity check, not a capacity claim:
+
+| Scenario | p50 | p95 | p99 | Target (p95, §2) |
+|---|---|---|---|---|
+| `GET /public/cities` | 4ms | 8ms | 8ms | < 200ms |
+| `POST /fare-estimates` | 9ms | 11ms | 12ms | < 800ms |
+| `GET /admin/dashboard/kpis` | 9ms | 12ms | 12ms | < 1.5s |
+
+Server-side (`GET /admin/observability`, 500-sample rolling window,
+same run): p50 0ms, p95 7ms, p99 10ms, zero failures across all six
+categories. Comfortably inside every target above — expected at this
+traffic level on an idle single-container SQLite instance, not evidence
+of production capacity.
+
+**A load-testing gotcha worth keeping in mind**: an *unpaced* run (many
+concurrent workers firing as fast as the local network round-trip
+allows) exhausts the general API limiter (300 req/min per IP,
+`middleware/rateLimit.ts`) in well under a second — thousands of
+requests per second on localhost, none of them a real server failure,
+all of them a 429 the limiter is designed to produce. The script buckets
+429s separately from real errors for exactly this reason; `--rps` paces
+the total request rate so a run measures endpoint latency instead of the
+rate limiter's rejection path. Pass a higher `--rps` deliberately to
+characterize the limiter itself, or raise/disable it server-side for a
+dedicated single-IP capacity run.

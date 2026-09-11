@@ -13,6 +13,7 @@
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
     "backup": "node scripts/backup-sqlite.mjs",
+    "load-test": "node scripts/load-test.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

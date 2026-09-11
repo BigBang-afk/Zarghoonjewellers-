@@ -19,6 +19,17 @@ using.
   job / scheduled CI job pointed at the production host. A sensible
   pilot cadence is daily, matching the 14-backup default retention (two
   weeks of daily snapshots).
+- **Restore path re-verified (Phase 5 §26)**: ran `npm run backup`
+  against the live dev database (91 users, all Phase 5 tables included),
+  pointed a separate Prisma Client at the resulting file via
+  `DATABASE_URL`, and confirmed it's a complete, independently queryable
+  database — `Experiment`, `SystemIncident`, and `Partner` row counts all
+  read back correctly — and that `npx prisma migrate status` against it
+  reports "Database schema is up to date!" across all 25 migrations,
+  including the two added this phase. Not a rehearsal of §5 end-to-end
+  (that still means actually stopping the app and swapping the live
+  file), but real confirmation that a backup taken today restores to a
+  fully-current, fully-intact database.
 
 This tool is explicitly scoped to SQLite (`file:` datasource URLs) and
 refuses to run against anything else — see §2 for what replaces it once

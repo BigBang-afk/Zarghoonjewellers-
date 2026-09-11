@@ -11,3 +11,7 @@ prisma/test.db-journal
 
 # Local backups produced by scripts/backup-sqlite.mjs — never committed
 backups/
+
+# Load-test run reports produced by scripts/load-test.mjs — environment-
+# specific numbers, never committed as if they were a capacity claim
+load-test-results/
