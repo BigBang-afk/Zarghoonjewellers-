@@ -10,6 +10,13 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Forces npm to install devDependencies (tsc, @types/*, vitest, ...)
+      # during the build step even with NODE_ENV=production set — the
+      # --include=dev build-command flag alone wasn't enough, likely
+      # because Render's node_modules build cache had already been
+      # populated without them by the first, pre-fix failed deploy.
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
       - key: DATABASE_URL
         value: file:./dev.db
       - key: JWT_ACCESS_SECRET
