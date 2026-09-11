@@ -6,6 +6,7 @@ import { validateBody } from "../../middleware/validate.js"
 import { requireAdminRole } from "../../middleware/auth.js"
 import { ApiError } from "../../utils/apiError.js"
 import { writeAuditLog } from "../../shared/audit.js"
+import { generatePartnerApiKey, revokePartnerApiKey } from "../../services/partnerApiKeyService.js"
 
 /**
  * Partner program admin endpoints (Phase 5 §19) — see partnerService.ts
@@ -102,5 +103,31 @@ adminPartnersRouter.post(
     ])
     await writeAuditLog({ req, action: "partner.payout", targetTable: "partner_payouts", targetId: payout.id, after: req.body })
     res.status(201).json({ payout })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Scoped partner API platform (Phase 5 §20) — key lifecycle only; the
+// API itself lives at /v1/partner-api (see api/partner/router.ts).
+// ---------------------------------------------------------------------
+
+adminPartnersRouter.post(
+  "/partners/:id/api-key/generate",
+  requireAdminRole("super_admin", "ops_manager"),
+  asyncHandler(async (req, res) => {
+    const { rawKey } = await generatePartnerApiKey(req.params.id)
+    await writeAuditLog({ req, action: "partner.api_key_generate", targetTable: "partners", targetId: req.params.id })
+    // The only time this key is ever returned — store it now, it can't be retrieved again.
+    res.json({ apiKey: rawKey })
+  }),
+)
+
+adminPartnersRouter.post(
+  "/partners/:id/api-key/revoke",
+  requireAdminRole("super_admin", "ops_manager"),
+  asyncHandler(async (req, res) => {
+    await revokePartnerApiKey(req.params.id)
+    await writeAuditLog({ req, action: "partner.api_key_revoke", targetTable: "partners", targetId: req.params.id })
+    res.status(204).send()
   }),
 )

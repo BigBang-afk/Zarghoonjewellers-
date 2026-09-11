@@ -445,6 +445,9 @@ export interface Partner {
   isActive: boolean
   totalEarned: number
   totalPaidOut: number
+  apiEnabled: boolean
+  apiKeyPrefix: string | null
+  apiKeyCreatedAt: string | null
   createdAt: string
   _count?: { referrals: number }
 }

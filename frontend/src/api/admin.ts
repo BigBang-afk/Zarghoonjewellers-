@@ -168,4 +168,6 @@ export const adminApi = {
     api.patch<{ partner: Partner }>(`/admin/partners/${id}`, data),
   recordPartnerPayout: (id: string, data: { amount: number; method: string; note?: string }) =>
     api.post<{ payout: PartnerPayout }>(`/admin/partners/${id}/payouts`, data),
+  generatePartnerApiKey: (id: string) => api.post<{ apiKey: string }>(`/admin/partners/${id}/api-key/generate`),
+  revokePartnerApiKey: (id: string) => api.post<void>(`/admin/partners/${id}/api-key/revoke`),
 }

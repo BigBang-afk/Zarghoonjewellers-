@@ -27,6 +27,7 @@ export interface CreateRideRequestInput {
   promoCode?: string
   businessAccountId?: string | null
   scheduledRideId?: string | null
+  partnerId?: string | null
 }
 
 async function getFavoriteDriverIds(passengerId: string): Promise<string[]> {
@@ -108,6 +109,7 @@ export async function createRideRequest(input: CreateRideRequestInput) {
       discountAmount: promoResult?.discountAmount ?? 0,
       businessAccountId: input.businessAccountId ?? undefined,
       departmentId: departmentId ?? undefined,
+      partnerId: input.partnerId ?? undefined,
       scheduledRideId: input.scheduledRideId ?? undefined,
       status: "searching",
       searchRadiusKm: initialRadius,

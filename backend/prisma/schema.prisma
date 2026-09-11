@@ -477,6 +477,8 @@ model RideRequest {
   businessAccountId             String?
   /// Snapshot of the requesting employee's department at booking time (Phase 5 §16) — see BusinessDepartment doc comment.
   departmentId                   String?
+  /// Set only when this request was created through the scoped partner API (Phase 5 §20), never by an app user directly.
+  partnerId                      String?
   scheduledRideId               String?  @unique
   expiresAt                     DateTime
   createdAt                     DateTime @default(now())
@@ -502,6 +504,7 @@ model RideRequest {
   promotion    Promotion?       @relation(fields: [promotionId], references: [id])
   businessAccount BusinessAccount? @relation(fields: [businessAccountId], references: [id])
   department      BusinessDepartment? @relation(fields: [departmentId], references: [id])
+  partner         Partner?         @relation(fields: [partnerId], references: [id])
   scheduledRide   ScheduledRide?   @relation(fields: [scheduledRideId], references: [id])
   offers       RideOffer[]
   ride         Ride?
@@ -1699,6 +1702,14 @@ model Partner {
   /// Lifetime commission earned across all qualified referrals — totalEarned minus totalPaidOut is what's currently owed.
   totalEarned     Float    @default(0)
   totalPaidOut    Float    @default(0)
+  /// Phase 5 §20 — scoped partner API platform. Only the hash is ever
+  /// stored (same pattern as RefreshToken.tokenHash); apiKeyPrefix is the
+  /// first few characters of the raw key, kept only so an admin UI can
+  /// show "which key is this" without ever re-displaying the secret.
+  apiEnabled      Boolean  @default(false)
+  apiKeyHash      String?  @unique
+  apiKeyPrefix    String?
+  apiKeyCreatedAt DateTime?
   createdById     String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -1706,6 +1717,7 @@ model Partner {
   createdBy       User?    @relation(fields: [createdById], references: [id])
   referrals       PartnerReferral[]
   payouts         PartnerPayout[]
+  apiRideRequests RideRequest[]
 
   @@map("partners")
 }

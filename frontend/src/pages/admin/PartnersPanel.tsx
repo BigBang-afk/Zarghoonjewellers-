@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ChevronDown, ChevronRight, Handshake, Plus } from "lucide-react"
+import { ChevronDown, ChevronRight, Handshake, Key, Plus } from "lucide-react"
 import { Card } from "../../components/ui/Card"
 import { Badge } from "../../components/ui/Badge"
 import { Button } from "../../components/ui/Button"
@@ -16,6 +16,7 @@ function PartnerDetailView({ partner }: { partner: Partner }) {
   const [payoutAmount, setPayoutAmount] = useState("")
   const [payoutMethod, setPayoutMethod] = useState("bank_transfer")
   const [busy, setBusy] = useState(false)
+  const [newApiKey, setNewApiKey] = useState<string | null>(null)
 
   function load() {
     setLoading(true)
@@ -43,12 +44,62 @@ function PartnerDetailView({ partner }: { partner: Partner }) {
     }
   }
 
+  async function generateKey() {
+    setBusy(true)
+    try {
+      const r = await adminApi.generatePartnerApiKey(partner.id)
+      setNewApiKey(r.apiKey)
+      load()
+    } catch (err) {
+      push("error", errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function revokeKey() {
+    if (!confirm("Revoke this partner's API key? Any integration using it will stop working immediately.")) return
+    setBusy(true)
+    try {
+      await adminApi.revokePartnerApiKey(partner.id)
+      setNewApiKey(null)
+      load()
+    } catch (err) {
+      push("error", errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading || !detail) return <LoadingState label="Loading partner…" />
 
   const owed = detail.totalEarned - detail.totalPaidOut
 
   return (
     <div className="border-t border-ink-900/[0.06] p-4 pt-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Key className="h-4 w-4 text-rivo-600" />
+        <p className="text-sm font-bold">Partner API</p>
+      </div>
+      {newApiKey ? (
+        <div className="mb-3 rounded-lg border border-warning-500/30 bg-gold-400/10 p-3">
+          <p className="text-xs font-bold text-ink-900">Copy this key now — it won't be shown again:</p>
+          <code className="mt-1 block break-all rounded bg-white p-2 text-xs">{newApiKey}</code>
+        </div>
+      ) : detail.apiEnabled ? (
+        <p className="mb-3 text-xs text-ink-700/60">Active key: {detail.apiKeyPrefix}… (generated {detail.apiKeyCreatedAt ? new Date(detail.apiKeyCreatedAt).toLocaleDateString() : ""})</p>
+      ) : (
+        <p className="mb-3 text-xs text-ink-700/60">No API key generated — this partner can't call the partner API yet.</p>
+      )}
+      <div className="mb-4 flex gap-2">
+        <Button size="sm" variant="secondary" onClick={generateKey} disabled={busy}>
+          {detail.apiEnabled ? "Regenerate key" : "Generate key"}
+        </Button>
+        {detail.apiEnabled && (
+          <button onClick={revokeKey} disabled={busy} className="text-xs font-bold text-danger-600">Revoke</button>
+        )}
+      </div>
+
       <div className="mb-3 grid grid-cols-3 gap-3">
         <div className="rounded-lg bg-ink-900/[0.03] p-3 text-center">
           <p className="font-display text-lg font-extrabold">{formatMoney(detail.totalEarned, null)}</p>

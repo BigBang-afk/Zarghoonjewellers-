@@ -19,6 +19,7 @@ import { accountRouter } from "./api/account/router.js"
 import { businessRouter } from "./api/business/router.js"
 import { supportRouter } from "./api/support/router.js"
 import { webhooksRouter } from "./api/public/webhooks.js"
+import { partnerApiRouter } from "./api/partner/router.js"
 
 export function createApp() {
   const app = express()
@@ -72,6 +73,7 @@ export function createApp() {
   app.use("/v1/account", accountRouter)
   app.use("/v1/business", businessRouter)
   app.use("/v1/support", supportRouter)
+  app.use("/v1/partner-api", partnerApiRouter)
   app.use("/v1", ridesRouter) // /ride-requests, /ride-offers, /counter-offers, /rides, /fare-estimates
 
   app.use(notFoundHandler)

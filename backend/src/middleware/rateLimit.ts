@@ -102,3 +102,19 @@ export const paymentRateLimit = configurableRateLimit(
   "rateLimit.payment.windowSec",
   "Too many payment attempts. Try again later.",
 )
+
+/**
+ * Scoped partner API (Phase 5 §20) — keyed on the partner's own API key
+ * rather than IP, so multiple partners behind the same NAT/proxy don't
+ * share one bucket, and one partner's traffic can't exhaust another's.
+ * Fixed cap (not admin-configurable) to keep this feature's scope small.
+ */
+export const partnerApiRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip,
+  keyGenerator: (req) => req.headers.authorization ?? req.ip ?? "unknown",
+  message: { error: { code: "RATE_LIMITED", message: "Too many requests. Try again shortly." } },
+})
