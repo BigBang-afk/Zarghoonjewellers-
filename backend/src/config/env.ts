@@ -25,7 +25,15 @@ export const env = {
   jwtAccessTtl: process.env.JWT_ACCESS_TTL ?? "15m",
   jwtRefreshTtl: process.env.JWT_REFRESH_TTL ?? "30d",
 
-  corsOrigin: (process.env.CORS_ORIGIN ?? "http://localhost:5173").split(",").map((s) => s.trim()),
+  // The `cors` package only treats a *bare* "*" string as "allow any
+  // origin" — passed inside an array (["*"]) it instead matches origins
+  // literally against the string "*", which no real browser/WebView ever
+  // sends, so every cross-origin request gets silently rejected. Special-
+  // cased here so CORS_ORIGIN=* actually behaves like a wildcard.
+  corsOrigin:
+    process.env.CORS_ORIGIN?.trim() === "*"
+      ? ("*" as const)
+      : (process.env.CORS_ORIGIN ?? "http://localhost:5173").split(",").map((s) => s.trim()),
 
   mockOtp: bool("MOCK_OTP", true),
   mockPayments: bool("MOCK_PAYMENTS", true),
