@@ -339,6 +339,64 @@ export interface LostItemReport {
   ride?: { id: string; completedAt: string | null }
 }
 
+export interface BusinessAccount {
+  id: string
+  companyName: string
+  billingContactUserId: string
+  cityId: string
+  paymentMethod: string
+  monthlySpendLimit: number | null
+  isActive: boolean
+  createdAt: string
+  billingContact?: { fullName: string; phone: string }
+  city?: { name: string; currencyCode: string }
+  _count?: { employees: number; rides: number }
+}
+
+export interface BusinessDepartment {
+  id: string
+  businessAccountId: string
+  name: string
+  monthlySpendLimit: number | null
+  createdAt: string
+  _count?: { employees: number }
+}
+
+export interface BusinessInvoice {
+  id: string
+  businessAccountId: string
+  periodStart: string
+  periodEnd: string
+  rideCount: number
+  totalAmount: number
+  currencyCode: string
+  status: "issued" | "paid" | "void"
+  issuedAt: string
+  dueAt: string | null
+  paidAt: string | null
+}
+
+export interface FleetAccount {
+  id: string
+  companyName: string
+  cityId: string
+  ownerUserId: string
+  commissionSharePct: number | null
+  isActive: boolean
+  createdAt: string
+  owner?: { fullName: string; phone: string }
+  city?: { name: string }
+  _count?: { drivers: number }
+}
+
+export interface FleetDashboard {
+  fleet: FleetAccount
+  driverCount: number
+  totalCompletedRides: number
+  totalGrossFareRs: number
+  drivers: { id: string; fullName: string; phone: string; availabilityStatus: string; completedRides: number; grossFareRs: number }[]
+}
+
 export interface DispatchAnalytics {
   range: { from: string; to: string }
   cityId: string | null

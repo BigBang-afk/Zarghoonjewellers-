@@ -1,5 +1,22 @@
 import { api } from "./client"
-import type { AdminKpis, City, DriverAcquisitionCampaign, DriverFunnelStage, DemandMap, DispatchAnalytics, CancellationAnalytics, LostItemReport, Promotion, PromotionAnalytics, ServiceZone } from "../types"
+import type {
+  AdminKpis,
+  City,
+  DriverAcquisitionCampaign,
+  DriverFunnelStage,
+  DemandMap,
+  DispatchAnalytics,
+  CancellationAnalytics,
+  LostItemReport,
+  BusinessAccount,
+  BusinessDepartment,
+  BusinessInvoice,
+  FleetAccount,
+  FleetDashboard,
+  Promotion,
+  PromotionAnalytics,
+  ServiceZone,
+} from "../types"
 
 export const adminApi = {
   kpis: (cityId?: string) => api.get<AdminKpis>("/admin/dashboard/kpis", cityId ? { cityId } : undefined),
@@ -77,4 +94,24 @@ export const adminApi = {
     api.get<{ reports: LostItemReport[]; total: number }>("/admin/lost-item-reports", query),
   updateLostItemReport: (id: string, status: "return_arranged" | "returned" | "closed") =>
     api.patch<{ report: LostItemReport }>(`/admin/lost-item-reports/${id}`, { status }),
+
+  // Business accounts (Phase 5 §16)
+  businessAccounts: () => api.get<{ accounts: BusinessAccount[] }>("/admin/business-accounts"),
+  businessDepartments: (accountId: string) => api.get<{ departments: BusinessDepartment[] }>(`/admin/business-accounts/${accountId}/departments`),
+  createBusinessDepartment: (accountId: string, data: { name: string; monthlySpendLimit?: number }) =>
+    api.post<{ department: BusinessDepartment }>(`/admin/business-accounts/${accountId}/departments`, data),
+  businessInvoices: (accountId: string) => api.get<{ invoices: BusinessInvoice[] }>(`/admin/business-accounts/${accountId}/invoices`),
+  generateBusinessInvoice: (accountId: string, data: { periodStart: string; periodEnd: string; dueAt?: string }) =>
+    api.post<{ invoice: BusinessInvoice }>(`/admin/business-accounts/${accountId}/invoices/generate`, data),
+  markInvoicePaid: (invoiceId: string) => api.post<{ invoice: BusinessInvoice }>(`/admin/business-invoices/${invoiceId}/mark-paid`),
+  voidInvoice: (invoiceId: string) => api.post<{ invoice: BusinessInvoice }>(`/admin/business-invoices/${invoiceId}/void`),
+
+  // Fleet accounts (Phase 5 §16)
+  fleetAccounts: () => api.get<{ fleets: FleetAccount[] }>("/admin/fleet-accounts"),
+  createFleetAccount: (data: { companyName: string; ownerUserId: string; cityId: string; commissionSharePct?: number }) =>
+    api.post<{ fleet: FleetAccount }>("/admin/fleet-accounts", data),
+  fleetDashboard: (id: string) => api.get<FleetDashboard>(`/admin/fleet-accounts/${id}/dashboard`),
+  assignDriverToFleet: (fleetId: string, driverId: string) =>
+    api.post<{ driver: unknown }>(`/admin/fleet-accounts/${fleetId}/drivers`, { driverId }),
+  removeDriverFromFleet: (fleetId: string, driverId: string) => api.delete<void>(`/admin/fleet-accounts/${fleetId}/drivers/${driverId}`),
 }

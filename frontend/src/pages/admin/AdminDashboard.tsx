@@ -20,6 +20,7 @@ import {
   Shield,
   ShieldAlert,
   Sliders,
+  Truck,
   Tag,
   Target,
   Users,
@@ -51,6 +52,8 @@ import { HeatMapPanel } from "./HeatMapPanel"
 import { DispatchAnalyticsPanel } from "./DispatchAnalyticsPanel"
 import { CancellationAnalyticsPanel } from "./CancellationAnalyticsPanel"
 import { LostFoundPanel } from "./LostFoundPanel"
+import { BusinessAccountsPanel } from "./BusinessAccountsPanel"
+import { FleetAccountsPanel } from "./FleetAccountsPanel"
 
 const nav = [
   {
@@ -86,6 +89,13 @@ const nav = [
     ],
   },
   {
+    group: "Business",
+    items: [
+      { label: "Business Accounts", icon: Building2 },
+      { label: "Fleet Accounts", icon: Truck },
+    ],
+  },
+  {
     group: "Trust & Safety",
     items: [
       { label: "Support", icon: LifeBuoy },
@@ -116,7 +126,7 @@ const nav = [
   },
 ]
 
-const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Lost & Found", "Passengers", "Drivers", "Ride Requests"])
+const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Lost & Found", "Business Accounts", "Fleet Accounts", "Passengers", "Drivers", "Ride Requests"])
 
 export function AdminDashboard() {
   const { user } = useAuth()
@@ -221,6 +231,10 @@ export function AdminDashboard() {
             <CancellationAnalyticsPanel />
           ) : active === "Lost & Found" ? (
             <LostFoundPanel />
+          ) : active === "Business Accounts" ? (
+            <BusinessAccountsPanel />
+          ) : active === "Fleet Accounts" ? (
+            <FleetAccountsPanel />
           ) : active === "Passengers" ? (
             <DirectoryPanel kind="passengers" />
           ) : active === "Drivers" ? (

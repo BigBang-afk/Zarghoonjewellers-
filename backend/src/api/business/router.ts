@@ -57,7 +57,13 @@ businessRouter.get(
 
     const rides = await prisma.ride.findMany({
       where: { businessAccountId: req.params.id },
-      include: { passenger: { include: { user: true } }, driver: { include: { user: true } }, pickup: true, destination: true },
+      include: {
+        passenger: { include: { user: true } },
+        driver: { include: { user: true } },
+        pickup: true,
+        destination: true,
+        rideRequest: { include: { department: { select: { id: true, name: true } } } },
+      },
       orderBy: { createdAt: "desc" },
       take: 100,
     })
@@ -66,12 +72,20 @@ businessRouter.get(
     const totalSpendingRs = completed.reduce((sum, r) => sum + (r.finalFare ?? r.agreedFare), 0)
 
     const byEmployee = new Map<string, { userId: string; name: string; rideCount: number; spendingRs: number }>()
+    const byDepartment = new Map<string, { departmentId: string | null; name: string; rideCount: number; spendingRs: number }>()
     for (const r of completed) {
       const userId = r.passenger.userId
       const entry = byEmployee.get(userId) ?? { userId, name: r.passenger.user.fullName, rideCount: 0, spendingRs: 0 }
       entry.rideCount += 1
       entry.spendingRs += r.finalFare ?? r.agreedFare
       byEmployee.set(userId, entry)
+
+      const dept = r.rideRequest.department
+      const deptKey = dept?.id ?? "unassigned"
+      const deptEntry = byDepartment.get(deptKey) ?? { departmentId: dept?.id ?? null, name: dept?.name ?? "Unassigned", rideCount: 0, spendingRs: 0 }
+      deptEntry.rideCount += 1
+      deptEntry.spendingRs += r.finalFare ?? r.agreedFare
+      byDepartment.set(deptKey, deptEntry)
     }
 
     res.json({
@@ -79,6 +93,7 @@ businessRouter.get(
       completedRides: completed.length,
       totalSpendingRs: Math.round(totalSpendingRs * 100) / 100,
       employeeBreakdown: Array.from(byEmployee.values()),
+      departmentBreakdown: Array.from(byDepartment.values()).map((d) => ({ ...d, spendingRs: Math.round(d.spendingRs * 100) / 100 })),
       rides: rides.map((r) => ({
         id: r.id,
         status: r.status,
@@ -132,18 +147,80 @@ businessRouter.put(
 
 businessRouter.post(
   "/accounts/:id/employees",
-  validateBody(z.object({ userId: z.string().uuid(), role: z.enum(["admin", "member"]).default("member") })),
+  validateBody(z.object({ userId: z.string().uuid(), role: z.enum(["admin", "member"]).default("member"), departmentId: z.string().uuid().optional() })),
   asyncHandler(async (req, res) => {
     const manager = await requireManager(req.params.id, req.auth!.userId)
     if (req.body.role === "admin" && manager.role !== "owner") {
       throw ApiError.forbidden("Only the account owner can assign the admin role.")
     }
+    if (req.body.departmentId) {
+      const department = await prisma.businessDepartment.findUnique({ where: { id: req.body.departmentId } })
+      if (!department || department.businessAccountId !== req.params.id) throw ApiError.badRequest("INVALID_DEPARTMENT", "Department not found on this account.")
+    }
     const employee = await prisma.businessEmployee.upsert({
       where: { businessAccountId_userId: { businessAccountId: req.params.id, userId: req.body.userId } },
-      create: { businessAccountId: req.params.id, userId: req.body.userId, role: req.body.role },
-      update: { role: req.body.role },
+      create: { businessAccountId: req.params.id, userId: req.body.userId, role: req.body.role, departmentId: req.body.departmentId },
+      update: { role: req.body.role, departmentId: req.body.departmentId },
     })
     res.status(201).json({ employee })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Departments (Phase 5 §16) — self-service read; owners/admins manage
+// them here too rather than needing platform-admin involvement, same
+// pattern as the ride policy endpoints above.
+// ---------------------------------------------------------------------
+
+businessRouter.get(
+  "/accounts/:id/departments",
+  asyncHandler(async (req, res) => {
+    await requireMembership(req.params.id, req.auth!.userId)
+    const departments = await prisma.businessDepartment.findMany({
+      where: { businessAccountId: req.params.id },
+      include: { _count: { select: { employees: true } } },
+      orderBy: { createdAt: "asc" },
+    })
+    res.json({ departments })
+  }),
+)
+
+businessRouter.post(
+  "/accounts/:id/departments",
+  validateBody(z.object({ name: z.string().trim().min(2).max(80), monthlySpendLimit: z.number().positive().optional() })),
+  asyncHandler(async (req, res) => {
+    await requireManager(req.params.id, req.auth!.userId)
+    const department = await prisma.businessDepartment.create({
+      data: { businessAccountId: req.params.id, name: req.body.name, monthlySpendLimit: req.body.monthlySpendLimit },
+    })
+    res.status(201).json({ department })
+  }),
+)
+
+businessRouter.patch(
+  "/accounts/:id/departments/:departmentId",
+  validateBody(z.object({ name: z.string().trim().min(2).max(80).optional(), monthlySpendLimit: z.number().positive().nullable().optional() })),
+  asyncHandler(async (req, res) => {
+    await requireManager(req.params.id, req.auth!.userId)
+    const existing = await prisma.businessDepartment.findUnique({ where: { id: req.params.departmentId } })
+    if (!existing || existing.businessAccountId !== req.params.id) throw ApiError.notFound("Department not found.")
+    const department = await prisma.businessDepartment.update({ where: { id: req.params.departmentId }, data: req.body })
+    res.json({ department })
+  }),
+)
+
+// ---------------------------------------------------------------------
+// Invoices (Phase 5 §16) — read-only for the business side; generation
+// and payment status live in admin/business.ts (billing is an
+// operations action, not self-service).
+// ---------------------------------------------------------------------
+
+businessRouter.get(
+  "/accounts/:id/invoices",
+  asyncHandler(async (req, res) => {
+    await requireMembership(req.params.id, req.auth!.userId)
+    const invoices = await prisma.businessInvoice.findMany({ where: { businessAccountId: req.params.id }, orderBy: { periodStart: "desc" } })
+    res.json({ invoices })
   }),
 )
 

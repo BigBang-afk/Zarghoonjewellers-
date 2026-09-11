@@ -88,6 +88,7 @@ model City {
   businessAccounts BusinessAccount[]
   contentItems    ContentItem[]
   driverAcquisitionCampaigns DriverAcquisitionCampaign[]
+  fleetAccounts   FleetAccount[]
 
   @@unique([countryId, name])
   @@index([status])
@@ -216,6 +217,7 @@ model User {
   promoRedemptions  PromoRedemption[]
   businessEmployeeOf BusinessEmployee[]
   billingContactFor BusinessAccount[] @relation("BusinessBillingContact")
+  ownedFleetAccounts FleetAccount[] @relation("FleetOwner")
   assignedSafetyEvents SafetyEvent[] @relation("SafetyEventAssignee")
   contentItemsCreated ContentItem[]
   retentionNotifications RetentionNotificationLog[]
@@ -273,12 +275,15 @@ model DriverProfile {
   destinationPreference String?
   /// Admin/driver-set personal daily earnings goal, purely informational.
   dailyEarningsTargetRs Float?
+  /// Phase 5 §16 — optional fleet operator this driver is affiliated with. Null for an independent driver.
+  fleetAccountId      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   deletedAt           DateTime?
 
   user                User     @relation(fields: [userId], references: [id])
   city                City     @relation(fields: [cityId], references: [id])
+  fleetAccount        FleetAccount? @relation(fields: [fleetAccountId], references: [id])
   documents           DriverDocument[]
   vehicles            Vehicle[]
   rideOffers          RideOffer[]
@@ -465,6 +470,8 @@ model RideRequest {
   promotionId                   String?
   discountAmount                Float    @default(0)
   businessAccountId             String?
+  /// Snapshot of the requesting employee's department at booking time (Phase 5 §16) — see BusinessDepartment doc comment.
+  departmentId                   String?
   scheduledRideId               String?  @unique
   expiresAt                     DateTime
   createdAt                     DateTime @default(now())
@@ -489,6 +496,7 @@ model RideRequest {
   destination  Location         @relation("RequestDestination", fields: [destinationLocationId], references: [id])
   promotion    Promotion?       @relation(fields: [promotionId], references: [id])
   businessAccount BusinessAccount? @relation(fields: [businessAccountId], references: [id])
+  department      BusinessDepartment? @relation(fields: [departmentId], references: [id])
   scheduledRide   ScheduledRide?   @relation(fields: [scheduledRideId], references: [id])
   offers       RideOffer[]
   ride         Ride?
@@ -1350,25 +1358,99 @@ model BusinessAccount {
   billingContact      User     @relation("BusinessBillingContact", fields: [billingContactUserId], references: [id])
   city                City     @relation(fields: [cityId], references: [id])
   employees           BusinessEmployee[]
+  departments         BusinessDepartment[]
+  invoices            BusinessInvoice[]
   rideRequests        RideRequest[]
   rides               Ride[]
 
   @@map("business_accounts")
 }
 
-/// role: owner | member
+/// role: owner | admin | member
 model BusinessEmployee {
   id                String   @id @default(uuid())
   businessAccountId String
   userId            String
+  departmentId      String?
   role              String   @default("member")
   createdAt         DateTime @default(now())
 
   businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id])
   user              User            @relation(fields: [userId], references: [id])
+  department        BusinessDepartment? @relation(fields: [departmentId], references: [id])
 
   @@unique([businessAccountId, userId])
   @@map("business_employees")
+}
+
+/// Phase 5 §16 — cost-center grouping within a BusinessAccount. A ride
+/// booked by an employee currently assigned to a department is attributed
+/// to it at booking time (RideRequest.departmentId is a snapshot, not a
+/// live join, so moving an employee later doesn't rewrite ride history).
+model BusinessDepartment {
+  id                String   @id @default(uuid())
+  businessAccountId String
+  name              String
+  monthlySpendLimit Float?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id])
+  employees         BusinessEmployee[]
+  rideRequests      RideRequest[]
+
+  @@unique([businessAccountId, name])
+  @@map("business_departments")
+}
+
+/// Phase 5 §16 — a billing-period snapshot of completed rides, generated
+/// on demand by admin (never an automatic recurring charge — no payment
+/// gateway supports corporate net-terms auto-collection here; "paid" is
+/// recorded by admin attesting to an offline payment, same honesty
+/// pattern as PayoutRequest's manual-transfer completion).
+/// status: issued | paid | void
+model BusinessInvoice {
+  id                String   @id @default(uuid())
+  businessAccountId String
+  periodStart       DateTime
+  periodEnd         DateTime
+  rideCount         Int
+  totalAmount       Float
+  currencyCode      String
+  status            String   @default("issued")
+  issuedAt          DateTime @default(now())
+  dueAt             DateTime?
+  paidAt            DateTime?
+  createdAt         DateTime @default(now())
+
+  businessAccount   BusinessAccount @relation(fields: [businessAccountId], references: [id])
+
+  @@index([businessAccountId, status])
+  @@map("business_invoices")
+}
+
+/// Phase 5 §16 — fleet/driver business accounts: a company that operates
+/// multiple drivers under one umbrella (distinct from BusinessAccount,
+/// which is a company whose *employees ride as passengers*). Drivers opt
+/// into a fleet via DriverProfile.fleetAccountId; commissionSharePct is
+/// informational only (surfaced on the fleet dashboard) — no automatic
+/// payout-splitting engine exists yet, so it never changes what a driver
+/// is actually paid.
+model FleetAccount {
+  id                 String   @id @default(uuid())
+  companyName        String
+  cityId             String
+  ownerUserId        String
+  commissionSharePct Float?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  city               City     @relation(fields: [cityId], references: [id])
+  owner              User     @relation("FleetOwner", fields: [ownerUserId], references: [id])
+  drivers            DriverProfile[]
+
+  @@map("fleet_accounts")
 }
 
 // ---------------------------------------------------------------------

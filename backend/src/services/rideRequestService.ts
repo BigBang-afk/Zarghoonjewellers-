@@ -58,13 +58,16 @@ export async function createRideRequest(input: CreateRideRequestInput) {
     proposedFare = input.proposedFare
   }
 
+  let departmentId: string | null = null
   if (input.businessAccountId) {
-    await enforceBusinessRidePolicy({
+    const result = await enforceBusinessRidePolicy({
       businessAccountId: input.businessAccountId,
+      employeeUserId: input.passengerUserId,
       vehicleTypeId: input.vehicleTypeId,
       zoneId: input.zoneId,
       fareRs: proposedFare,
     })
+    departmentId = result.departmentId
   }
 
   let promoResult: { promotionId: string; discountAmount: number } | null = null
@@ -104,6 +107,7 @@ export async function createRideRequest(input: CreateRideRequestInput) {
       promotionId: promoResult?.promotionId,
       discountAmount: promoResult?.discountAmount ?? 0,
       businessAccountId: input.businessAccountId ?? undefined,
+      departmentId: departmentId ?? undefined,
       scheduledRideId: input.scheduledRideId ?? undefined,
       status: "searching",
       searchRadiusKm: initialRadius,
