@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs"
 import { prisma } from "../src/utils/prisma.js"
+import { invalidateSettingsCache } from "../src/config/settings.js"
 
 export const PASSWORD = "TestPass123!"
 let passwordHash: string | null = null
@@ -13,7 +14,7 @@ const WIPE_ORDER = [
   "auditLog", "adminUser",
   "review", "rating", "message", "notification",
   "transaction", "commission", "payment",
-  "rideStatusHistory", "rideLocation", "safetyEvent", "dispute", "supportMessage", "supportTicket", "ride",
+  "rideStatusHistory", "rideLocation", "safetyEvent", "dispute", "supportMessage", "lostItemReport", "supportTicket", "ride",
   "counterOffer", "rideOffer", "rideRequest",
   "promoRedemption", "favoriteDriver",
   "driverIncentiveProgress", "incentiveReward",
@@ -21,12 +22,18 @@ const WIPE_ORDER = [
   "driverOnlineSession",
   "payoutRequest",
   "vehicleDocument", "vehicle", "driverDocument", "driverProfile",
+  "fleetAccount",
   "wallet", "passengerProfile", "location",
-  "businessEmployee", "businessAccount",
+  "businessEmployee", "businessInvoice", "businessDepartment", "businessAccount",
   "referral", "referralCode",
   "riskEvent", "riskScore", "notificationPreference", "userBlock",
   "incentiveCampaign",
   "contentItem", "notificationTemplate", "waitlistEntry", "invitationCode", "webhookEvent",
+  "marketingCampaign",
+  "partnerPayout", "partnerReferral", "partner",
+  "experimentAssignment", "experiment",
+  "systemIncidentUpdate", "systemIncident",
+  "featureFlag",
   "refreshToken", "otpCode", "user",
   "fareRule", "cityVehicleType", "promotion", "serviceZone", "city", "country",
   "vehicleType", "platformSetting",
@@ -37,6 +44,12 @@ export async function resetDb() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prisma as any)[table].deleteMany()
   }
+  // platformSetting rows are gone, but config/settings.ts caches reads
+  // in-process for a few seconds (CACHE_TTL_MS) and only invalidates on
+  // its own setSetting() calls — a direct deleteMany() here bypasses that,
+  // so without this a setting changed by one test can leak into the next
+  // one within the same cache window.
+  invalidateSettingsCache()
 }
 
 export interface Fixtures {
