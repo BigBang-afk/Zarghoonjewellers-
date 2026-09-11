@@ -597,11 +597,29 @@ export interface SystemIncident {
   updates: SystemIncidentUpdate[]
 }
 
+export interface PublicSystemIncidentUpdate {
+  id: string
+  status: "investigating" | "identified" | "monitoring" | "resolved"
+  message: string
+  createdAt: string
+}
+
+export interface PublicSystemIncident {
+  id: string
+  title: string
+  affectedArea: string | null
+  severity: "minor" | "major" | "critical"
+  status: "investigating" | "identified" | "monitoring" | "resolved"
+  startedAt: string
+  resolvedAt: string | null
+  updates: PublicSystemIncidentUpdate[]
+}
+
 export interface PublicSystemStatus {
   overallStatus: "operational" | "degraded" | "partial_outage" | "major_outage"
   checkedAt: string
-  openIncidents: SystemIncident[]
-  recentResolvedIncidents: SystemIncident[]
+  openIncidents: PublicSystemIncident[]
+  recentResolvedIncidents: PublicSystemIncident[]
 }
 
 export interface Partner {

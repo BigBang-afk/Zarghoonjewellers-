@@ -92,11 +92,12 @@ adminMarketingRouter.get(
   asyncHandler(async (req, res) => {
     const cityName = req.query.cityName as string | undefined
     const userType = req.query.userType as string | undefined
-    const entries = await prisma.waitlistEntry.findMany({
-      where: { ...(cityName ? { cityName } : {}), ...(userType ? { userType } : {}) },
-      orderBy: { createdAt: "desc" },
-    })
-    res.json({ entries, total: entries.length })
+    const where = { ...(cityName ? { cityName } : {}), ...(userType ? { userType } : {}) }
+    const [entries, total] = await Promise.all([
+      prisma.waitlistEntry.findMany({ where, orderBy: { createdAt: "desc" }, take: 1000 }),
+      prisma.waitlistEntry.count({ where }),
+    ])
+    res.json({ entries, total })
   }),
 )
 
@@ -106,7 +107,11 @@ adminMarketingRouter.get(
   asyncHandler(async (_req, res) => {
     const entries = await prisma.waitlistEntry.findMany({ orderBy: { createdAt: "desc" } })
     const header = "fullName,contact,cityName,userType,marketingConsent,createdAt"
-    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
+    // These three fields are attacker-controlled (submitted via the public
+    // /public/waitlist form) — quote them and neutralize a leading
+    // =/+/-/@, which some spreadsheet apps treat as a formula, to prevent
+    // CSV/formula injection when an admin opens this export.
+    const escape = (v: string) => `"${(/^[=+\-@]/.test(v) ? `\t${v}` : v).replace(/"/g, '""')}"`
     const rows = entries.map((e) =>
       [escape(e.fullName), escape(e.contact), escape(e.cityName), e.userType, e.marketingConsent, e.createdAt.toISOString()].join(","),
     )
@@ -123,6 +128,7 @@ adminMarketingRouter.delete(
     const entry = await prisma.waitlistEntry.findUnique({ where: { id: req.params.id } })
     if (!entry) throw ApiError.notFound("Waitlist entry not found.")
     await prisma.waitlistEntry.delete({ where: { id: req.params.id } })
+    await writeAuditLog({ req, action: "waitlist_entry.delete", targetTable: "waitlist_entries", targetId: req.params.id, before: entry })
     res.status(204).send()
   }),
 )

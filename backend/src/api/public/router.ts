@@ -101,14 +101,30 @@ publicRouter.get(
       databaseUp = false
     }
 
+    // Explicit select, not include — this is an unauthenticated endpoint,
+    // so internal fields like createdById/postedById (admin user IDs)
+    // must never leak into the response.
+    const incidentSelect = {
+      id: true,
+      title: true,
+      affectedArea: true,
+      severity: true,
+      status: true,
+      startedAt: true,
+      resolvedAt: true,
+      updates: {
+        select: { id: true, status: true, message: true, createdAt: true },
+        orderBy: { createdAt: "desc" as const },
+      },
+    }
     const openIncidents = await prisma.systemIncident.findMany({
       where: { status: { not: "resolved" } },
-      include: { updates: { orderBy: { createdAt: "desc" } } },
+      select: incidentSelect,
       orderBy: { startedAt: "desc" },
     })
     const recentResolvedIncidents = await prisma.systemIncident.findMany({
       where: { status: "resolved" },
-      include: { updates: { orderBy: { createdAt: "desc" } } },
+      select: incidentSelect,
       orderBy: { resolvedAt: "desc" },
       take: 5,
     })

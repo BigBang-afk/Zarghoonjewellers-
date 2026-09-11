@@ -6,7 +6,7 @@ import { Card } from "../components/ui/Card"
 import { Badge } from "../components/ui/Badge"
 import { LoadingState, ErrorState } from "../components/ui/States"
 import { publicApi } from "../api/public"
-import type { PublicSystemStatus, SystemIncident } from "../types"
+import type { PublicSystemStatus, PublicSystemIncident } from "../types"
 
 const OVERALL_META = {
   operational: { label: "All systems operational", icon: CheckCircle2, tone: "text-success-600", bg: "bg-success-500/10" },
@@ -18,7 +18,7 @@ const OVERALL_META = {
 const SEVERITY_TONE = { minor: "warning", major: "warning", critical: "danger" } as const
 const STATUS_TONE = { investigating: "danger", identified: "warning", monitoring: "warning", resolved: "success" } as const
 
-function IncidentCard({ incident }: { incident: SystemIncident }) {
+function IncidentCard({ incident }: { incident: PublicSystemIncident }) {
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-2">

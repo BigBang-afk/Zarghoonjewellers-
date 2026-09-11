@@ -239,9 +239,18 @@ function WaitlistSection() {
     }
   }
 
+  function csvField(v: string | boolean): string {
+    const s = String(v)
+    // Quote every field and escape embedded quotes; also neutralize a
+    // leading =/+/-/@ (CSV/formula injection if opened in a spreadsheet
+    // app) by prefixing a tab, same defense as the backend's CSV export.
+    const safe = /^[=+\-@]/.test(s) ? `\t${s}` : s
+    return `"${safe.replace(/"/g, '""')}"`
+  }
+
   function exportCsv() {
     const header = "fullName,contact,cityName,userType,marketingConsent,createdAt"
-    const rows = entries.map((e) => [e.fullName, e.contact, e.cityName, e.userType, e.marketingConsent, e.createdAt].join(","))
+    const rows = entries.map((e) => [e.fullName, e.contact, e.cityName, e.userType, e.marketingConsent, e.createdAt].map(csvField).join(","))
     const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
