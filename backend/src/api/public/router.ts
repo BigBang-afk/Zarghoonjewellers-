@@ -80,3 +80,52 @@ publicRouter.post(
     res.status(201).json({ id: entry.id })
   }),
 )
+
+// ---------------------------------------------------------------------
+// System status page (Phase 5 §23) — a live DB check plus admin-posted
+// incidents. Overall status is the worst severity among currently-open
+// incidents (an incident is "open" until its latest update is resolved),
+// downgraded straight to "down" if the database itself is unreachable
+// regardless of what any incident says.
+// ---------------------------------------------------------------------
+
+const SEVERITY_RANK: Record<string, number> = { minor: 1, major: 2, critical: 3 }
+
+publicRouter.get(
+  "/system-status",
+  asyncHandler(async (_req, res) => {
+    let databaseUp = true
+    try {
+      await prisma.$queryRaw`SELECT 1`
+    } catch {
+      databaseUp = false
+    }
+
+    const openIncidents = await prisma.systemIncident.findMany({
+      where: { status: { not: "resolved" } },
+      include: { updates: { orderBy: { createdAt: "desc" } } },
+      orderBy: { startedAt: "desc" },
+    })
+    const recentResolvedIncidents = await prisma.systemIncident.findMany({
+      where: { status: "resolved" },
+      include: { updates: { orderBy: { createdAt: "desc" } } },
+      orderBy: { resolvedAt: "desc" },
+      take: 5,
+    })
+
+    let overallStatus: "operational" | "degraded" | "partial_outage" | "major_outage" = "operational"
+    if (!databaseUp) {
+      overallStatus = "major_outage"
+    } else if (openIncidents.length > 0) {
+      const worst = Math.max(...openIncidents.map((i) => SEVERITY_RANK[i.severity] ?? 1))
+      overallStatus = worst >= 3 ? "major_outage" : worst === 2 ? "partial_outage" : "degraded"
+    }
+
+    res.json({
+      overallStatus,
+      checkedAt: new Date().toISOString(),
+      openIncidents,
+      recentResolvedIncidents,
+    })
+  }),
+)

@@ -1,5 +1,6 @@
 import { NavLink, Route, HashRouter as Router, Routes } from "react-router-dom"
 import { Landing } from "./pages/Landing"
+import { StatusPage } from "./pages/StatusPage"
 import { CustomerHome } from "./pages/passenger/CustomerHome"
 import { DriverHome } from "./pages/driver/DriverHome"
 import { AdminDashboard } from "./pages/admin/AdminDashboard"
@@ -67,6 +68,7 @@ function AppRoutes() {
       <PreviewSwitcher />
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/status" element={<StatusPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register/passenger" element={<RegisterPassenger />} />
         <Route path="/register/driver" element={<RegisterDriver />} />

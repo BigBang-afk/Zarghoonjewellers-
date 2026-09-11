@@ -20,6 +20,7 @@ import { adminCancellationsRouter } from "./cancellations.js"
 import { adminPartnersRouter } from "./partners.js"
 import { adminFeatureFlagsRouter } from "./featureFlags.js"
 import { adminExperimentsRouter } from "./experiments.js"
+import { adminSystemStatusRouter } from "./systemStatus.js"
 
 export const adminRouter = Router()
 adminRouter.use(requireAuth, requireRole("admin"))
@@ -44,3 +45,4 @@ adminRouter.use(adminCancellationsRouter)
 adminRouter.use(adminPartnersRouter)
 adminRouter.use(adminFeatureFlagsRouter)
 adminRouter.use(adminExperimentsRouter)
+adminRouter.use(adminSystemStatusRouter)

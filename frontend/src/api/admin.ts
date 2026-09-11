@@ -23,6 +23,10 @@ import type {
   FeatureFlag,
   Experiment,
   ExperimentResult,
+  PilotModeSettings,
+  InvitationCode,
+  WaitlistEntry,
+  SystemIncident,
   Promotion,
   PromotionAnalytics,
   ServiceZone,
@@ -213,4 +217,23 @@ export const adminApi = {
     }>,
   ) => api.patch<{ experiment: Experiment }>(`/admin/experiments/${id}`, data),
   deleteExperiment: (id: string) => api.delete<void>(`/admin/experiments/${id}`),
+
+  // Launch Mode: pilot mode + invitation codes + waitlist (Phase 4 §37/§38, wired to a UI in Phase 5 §23)
+  pilotMode: () => api.get<{ settings: PilotModeSettings; current: { driverCount: number; passengerCount: number } }>("/admin/pilot-mode"),
+  updatePilotMode: (data: Partial<PilotModeSettings>) => api.put<{ settings: PilotModeSettings }>("/admin/pilot-mode", data),
+  invitationCodes: () => api.get<{ codes: InvitationCode[] }>("/admin/invitation-codes"),
+  createInvitationCode: (data: { code: string; maxUses?: number; cityId?: string; expiresAt?: string }) =>
+    api.post<{ invite: InvitationCode }>("/admin/invitation-codes", data),
+  updateInvitationCode: (id: string, data: Partial<{ isActive: boolean; maxUses: number }>) =>
+    api.patch<{ invite: InvitationCode }>(`/admin/invitation-codes/${id}`, data),
+  waitlist: (query?: { cityName?: string; userType?: string }) => api.get<{ entries: WaitlistEntry[]; total: number }>("/admin/waitlist", query),
+  deleteWaitlistEntry: (id: string) => api.delete<void>(`/admin/waitlist/${id}`),
+
+  // System status page (Phase 5 §23)
+  systemIncidents: (status?: string) => api.get<{ incidents: SystemIncident[] }>("/admin/system-incidents", status ? { status } : undefined),
+  createSystemIncident: (data: { title: string; affectedArea?: string; severity: "minor" | "major" | "critical"; message: string }) =>
+    api.post<{ incident: SystemIncident }>("/admin/system-incidents", data),
+  addSystemIncidentUpdate: (id: string, data: { status: "investigating" | "identified" | "monitoring" | "resolved"; message: string }) =>
+    api.post<{ incident: SystemIncident }>(`/admin/system-incidents/${id}/updates`, data),
+  deleteSystemIncident: (id: string) => api.delete<void>(`/admin/system-incidents/${id}`),
 }

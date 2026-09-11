@@ -469,6 +469,66 @@ export interface ExperimentResult {
   assignedCount: number
 }
 
+export interface PilotModeSettings {
+  enabled: boolean
+  cityId: string
+  maxDriverCount: number
+  maxPassengerCount: number
+  requireInvitationCode: boolean
+}
+
+export interface InvitationCode {
+  id: string
+  code: string
+  maxUses: number | null
+  usedCount: number
+  cityId: string | null
+  isActive: boolean
+  expiresAt: string | null
+  createdAt: string
+}
+
+export interface WaitlistEntry {
+  id: string
+  fullName: string
+  contact: string
+  cityName: string
+  userType: "passenger" | "driver"
+  marketingConsent: boolean
+  createdAt: string
+}
+
+export interface SystemIncidentUpdate {
+  id: string
+  incidentId: string
+  status: "investigating" | "identified" | "monitoring" | "resolved"
+  message: string
+  postedById: string
+  postedBy?: { fullName: string }
+  createdAt: string
+}
+
+export interface SystemIncident {
+  id: string
+  title: string
+  affectedArea: string | null
+  severity: "minor" | "major" | "critical"
+  status: "investigating" | "identified" | "monitoring" | "resolved"
+  startedAt: string
+  resolvedAt: string | null
+  createdById: string
+  createdAt: string
+  updatedAt: string
+  updates: SystemIncidentUpdate[]
+}
+
+export interface PublicSystemStatus {
+  overallStatus: "operational" | "degraded" | "partial_outage" | "major_outage"
+  checkedAt: string
+  openIncidents: SystemIncident[]
+  recentResolvedIncidents: SystemIncident[]
+}
+
 export interface Partner {
   id: string
   name: string

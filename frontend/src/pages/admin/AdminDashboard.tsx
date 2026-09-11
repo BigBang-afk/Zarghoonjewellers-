@@ -18,6 +18,7 @@ import {
   Megaphone,
   PackageSearch,
   Percent,
+  Rocket,
   Route,
   Search,
   Settings,
@@ -63,6 +64,8 @@ import { MarketingCampaignsPanel } from "./MarketingCampaignsPanel"
 import { PartnersPanel } from "./PartnersPanel"
 import { FeatureFlagsPanel } from "./FeatureFlagsPanel"
 import { ExperimentsPanel } from "./ExperimentsPanel"
+import { LaunchModePanel } from "./LaunchModePanel"
+import { SystemStatusPanel } from "./SystemStatusPanel"
 
 const nav = [
   {
@@ -133,13 +136,15 @@ const nav = [
       { label: "Admin Users", icon: UserCog },
       { label: "Feature Flags", icon: Flag },
       { label: "A/B Tests", icon: FlaskConical },
+      { label: "Launch Mode", icon: Rocket },
+      { label: "System Status", icon: AlertTriangle },
       { label: "Settings", icon: Settings },
       { label: "Audit Logs", icon: ScrollText },
     ],
   },
 ]
 
-const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Marketing Campaigns", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Lost & Found", "Business Accounts", "Fleet Accounts", "Partner Program", "Feature Flags", "A/B Tests", "Analytics", "Passengers", "Drivers", "Ride Requests"])
+const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Marketing Campaigns", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Lost & Found", "Business Accounts", "Fleet Accounts", "Partner Program", "Feature Flags", "A/B Tests", "Launch Mode", "System Status", "Analytics", "Passengers", "Drivers", "Ride Requests"])
 
 export function AdminDashboard() {
   const { user } = useAuth()
@@ -256,6 +261,10 @@ export function AdminDashboard() {
             <FeatureFlagsPanel />
           ) : active === "A/B Tests" ? (
             <ExperimentsPanel />
+          ) : active === "Launch Mode" ? (
+            <LaunchModePanel />
+          ) : active === "System Status" ? (
+            <SystemStatusPanel />
           ) : active === "Analytics" ? (
             <PlatformAnalyticsPanel />
           ) : active === "Passengers" ? (

@@ -227,6 +227,8 @@ model User {
   contentItemsCreated ContentItem[]
   retentionNotifications RetentionNotificationLog[]
   experimentAssignments ExperimentAssignment[]
+  systemIncidentsCreated SystemIncident[]
+  systemIncidentUpdatesPosted SystemIncidentUpdate[]
 
   @@index([role, status])
   @@index([deletionRequestedAt])
@@ -1829,4 +1831,45 @@ model InvitationCode {
   createdAt  DateTime @default(now())
 
   @@map("invitation_codes")
+}
+
+// ---------------------------------------------------------------------
+// Public status page (Phase 5 §23)
+// ---------------------------------------------------------------------
+
+/// severity: minor | major | critical (drives the public page's overall
+/// status banner while any update on the incident is unresolved).
+/// status (of the latest update): investigating | identified | monitoring | resolved
+model SystemIncident {
+  id           String   @id @default(uuid())
+  title        String
+  affectedArea String?
+  severity     String   @default("minor")
+  status       String   @default("investigating")
+  startedAt    DateTime @default(now())
+  resolvedAt   DateTime?
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdBy    User                   @relation(fields: [createdById], references: [id])
+  updates      SystemIncidentUpdate[]
+
+  @@index([status])
+  @@map("system_incidents")
+}
+
+model SystemIncidentUpdate {
+  id         String   @id @default(uuid())
+  incidentId String
+  status     String
+  message    String
+  postedById String
+  createdAt  DateTime @default(now())
+
+  incident   SystemIncident @relation(fields: [incidentId], references: [id])
+  postedBy   User           @relation(fields: [postedById], references: [id])
+
+  @@index([incidentId, createdAt])
+  @@map("system_incident_updates")
 }
