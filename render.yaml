@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     rootDir: backend
-    buildCommand: npm install && npm run build && npx prisma generate && npx prisma migrate deploy && npm run seed
+    buildCommand: npm install --include=dev && npm run build && npx prisma generate && npx prisma migrate deploy && npm run seed
     startCommand: npm start
     healthCheckPath: /health
     envVars:
