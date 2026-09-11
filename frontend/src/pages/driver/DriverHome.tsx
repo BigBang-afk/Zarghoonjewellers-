@@ -20,6 +20,7 @@ import { EarningsPanel } from "./EarningsPanel"
 import { OnboardingPanel } from "./OnboardingPanel"
 import { LostFoundSheet } from "./LostFoundSheet"
 import { ReferralPanel } from "../../components/ReferralPanel"
+import { RideHistoryPanel } from "../../components/RideHistoryPanel"
 
 export function DriverHome() {
   const { user } = useAuth()
@@ -32,7 +33,7 @@ export function DriverHome() {
   const [rating, setRating] = useState(5)
   const [todayRs, setTodayRs] = useState(0)
   const [currencyCode, setCurrencyCode] = useState<string | null>(null)
-  const [tab, setTab] = useState<"home" | "earnings" | "referral">("home")
+  const [tab, setTab] = useState<"home" | "earnings" | "referral" | "history">("home")
   const [showLostFound, setShowLostFound] = useState(false)
 
   const [incoming, setIncoming] = useState<IncomingRequestSummary[]>([])
@@ -272,9 +273,11 @@ export function DriverHome() {
             onDone={() => { setJustCompleted(null); loadEarningsSnapshot() }}
           />
         ) : tab === "earnings" ? (
-          <EarningsPanel onOpenReferral={() => setTab("referral")} />
+          <EarningsPanel onOpenReferral={() => setTab("referral")} onOpenHistory={() => setTab("history")} />
         ) : tab === "referral" ? (
           <ReferralPanel onClose={() => setTab("earnings")} />
+        ) : tab === "history" ? (
+          <RideHistoryPanel role="driver" onClose={() => setTab("home")} />
         ) : verificationStatus !== "approved" ? (
           <OnboardingPanel verificationStatus={verificationStatus} />
         ) : (

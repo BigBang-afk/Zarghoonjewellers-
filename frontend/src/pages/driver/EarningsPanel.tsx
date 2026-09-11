@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Clock, Gift, Route, Star, Trophy, Wallet, Zap } from "lucide-react"
+import { Clock, Gift, History, Route, Star, Trophy, Wallet, Zap } from "lucide-react"
 import { Card } from "../../components/ui/Card"
 import { LoadingState } from "../../components/ui/States"
 import { Button } from "../../components/ui/Button"
@@ -17,7 +17,7 @@ const PAYOUT_STATUS_LABEL: Record<PayoutRequest["status"], string> = {
   cancelled: "Cancelled",
 }
 
-export function EarningsPanel({ onOpenReferral }: { onOpenReferral?: () => void } = {}) {
+export function EarningsPanel({ onOpenReferral, onOpenHistory }: { onOpenReferral?: () => void; onOpenHistory?: () => void } = {}) {
   const [data, setData] = useState<DriverEarningsSummary | null>(null)
   const [incentives, setIncentives] = useState<DriverIncentiveSummary | null>(null)
   const [payouts, setPayouts] = useState<PayoutRequest[]>([])
@@ -78,11 +78,18 @@ export function EarningsPanel({ onOpenReferral }: { onOpenReferral?: () => void 
     <div className="flex-1 overflow-y-auto px-4 pb-24 pt-4 scrollbar-none">
       <div className="flex items-center justify-between">
         <p className="font-display text-lg font-bold">Earnings</p>
-        {onOpenReferral && (
-          <button onClick={onOpenReferral} className="flex items-center gap-1.5 rounded-full bg-gold-400/15 px-3 py-1.5 text-xs font-bold text-gold-700">
-            <Gift className="h-3.5 w-3.5" /> Refer & earn
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onOpenHistory && (
+            <button onClick={onOpenHistory} className="flex items-center gap-1.5 rounded-full bg-ink-900/[0.05] px-3 py-1.5 text-xs font-bold text-ink-700">
+              <History className="h-3.5 w-3.5" /> History
+            </button>
+          )}
+          {onOpenReferral && (
+            <button onClick={onOpenReferral} className="flex items-center gap-1.5 rounded-full bg-gold-400/15 px-3 py-1.5 text-xs font-bold text-gold-700">
+              <Gift className="h-3.5 w-3.5" /> Refer & earn
+            </button>
+          )}
+        </div>
       </div>
 
       <Card className="mt-3 p-5">

@@ -397,6 +397,41 @@ export interface FleetDashboard {
   drivers: { id: string; fullName: string; phone: string; availabilityStatus: string; completedRides: number; grossFareRs: number }[]
 }
 
+export interface PassengerAnalytics {
+  totalPassengers: number
+  passengersWithAtLeastOneRide: number
+  activationRatePct: number
+  avgCompletedRidesPerPassenger: number
+  avgRatingGiven: number
+  passengersWithWalletBalance: number
+  passengersWithFavoriteDriver: number
+  successfulReferrals: number
+}
+
+export interface DriverAnalytics {
+  totalDrivers: number
+  driversWithAtLeastOneRide: number
+  activationRatePct: number
+  onlineNow: number
+  avgAcceptanceRatePct: number
+  avgCancellationRatePct: number
+  avgRating: number
+  avgCompletedRides: number
+  totalDriverPayoutsRs: number
+  avgPayoutPerRideRs: number
+}
+
+export interface MarketplaceAnalytics {
+  grossBookingValueRs: number
+  platformRevenueRs: number
+  takeRatePct: number
+  completedRides: number
+  cancelledRides: number
+  cancellationRatePct: number
+  ridesByBookingMode: { bookingMode: string; count: number }[]
+  ridesByPaymentMethod: { paymentMethod: string; count: number }[]
+}
+
 export interface DispatchAnalytics {
   range: { from: string; to: string }
   cityId: string | null

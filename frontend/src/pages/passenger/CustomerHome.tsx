@@ -33,8 +33,9 @@ import { LiveRidePanel } from "./LiveRidePanel"
 import { RatingPanel } from "./RatingPanel"
 import { WalletPanel } from "./WalletPanel"
 import { ReferralPanel } from "../../components/ReferralPanel"
+import { RideHistoryPanel } from "../../components/RideHistoryPanel"
 
-type View = "home" | "searching" | "offers" | "live" | "rating" | "wallet" | "referral"
+type View = "home" | "searching" | "offers" | "live" | "rating" | "wallet" | "referral" | "history"
 
 export function CustomerHome() {
   const { user } = useAuth()
@@ -198,6 +199,7 @@ export function CustomerHome() {
         )}
         {view === "wallet" && <WalletPanel onClose={() => setView("home")} onOpenReferral={() => setView("referral")} />}
         {view === "referral" && <ReferralPanel onClose={() => setView("home")} />}
+        {view === "history" && <RideHistoryPanel role="passenger" onClose={() => setView("home")} />}
 
         {view === "home" &&
           (loadingRefData ? (
@@ -389,7 +391,7 @@ export function CustomerHome() {
               <div className="absolute inset-x-0 bottom-0 flex items-center justify-around border-t border-ink-900/[0.06] bg-white/95 py-3 backdrop-blur">
                 {[
                   { icon: HomeIcon, label: t("nav.home"), active: true, onClick: () => {} },
-                  { icon: Clock, label: t("nav.activity"), onClick: () => {} },
+                  { icon: Clock, label: t("nav.activity"), onClick: () => setView("history") },
                   { icon: Wallet, label: t("nav.wallet"), onClick: () => setView("wallet") },
                   { icon: User, label: t("nav.profile"), onClick: () => {} },
                 ].map((t) => (

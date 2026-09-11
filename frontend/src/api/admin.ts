@@ -13,6 +13,9 @@ import type {
   BusinessInvoice,
   FleetAccount,
   FleetDashboard,
+  PassengerAnalytics,
+  DriverAnalytics,
+  MarketplaceAnalytics,
   Promotion,
   PromotionAnalytics,
   ServiceZone,
@@ -114,4 +117,9 @@ export const adminApi = {
   assignDriverToFleet: (fleetId: string, driverId: string) =>
     api.post<{ driver: unknown }>(`/admin/fleet-accounts/${fleetId}/drivers`, { driverId }),
   removeDriverFromFleet: (fleetId: string, driverId: string) => api.delete<void>(`/admin/fleet-accounts/${fleetId}/drivers/${driverId}`),
+
+  // Platform analytics (Phase 3 §23, wired to a UI in Phase 5 §17)
+  passengerAnalytics: (cityId?: string) => api.get<PassengerAnalytics>("/admin/analytics/passengers", cityId ? { cityId } : undefined),
+  driverAnalytics: (cityId?: string) => api.get<DriverAnalytics>("/admin/analytics/drivers", cityId ? { cityId } : undefined),
+  marketplaceAnalytics: (cityId?: string) => api.get<MarketplaceAnalytics>("/admin/analytics/marketplace", cityId ? { cityId } : undefined),
 }
