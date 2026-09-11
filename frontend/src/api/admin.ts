@@ -17,6 +17,9 @@ import type {
   DriverAnalytics,
   MarketplaceAnalytics,
   MarketingCampaign,
+  Partner,
+  PartnerDetail,
+  PartnerPayout,
   Promotion,
   PromotionAnalytics,
   ServiceZone,
@@ -147,4 +150,22 @@ export const adminApi = {
   }) => api.post<{ recipientCount: number }>("/admin/campaigns/preview-audience", segment),
   sendCampaign: (id: string) => api.post<{ campaign: MarketingCampaign }>(`/admin/campaigns/${id}/send`),
   cancelCampaign: (id: string) => api.post<{ campaign: MarketingCampaign }>(`/admin/campaigns/${id}/cancel`),
+
+  // Partner program (Phase 5 §19)
+  partners: () => api.get<{ partners: Partner[] }>("/admin/partners"),
+  partnerDetail: (id: string) => api.get<{ partner: PartnerDetail }>(`/admin/partners/${id}`),
+  createPartner: (data: {
+    name: string
+    contactName?: string
+    contactEmail?: string
+    contactPhone?: string
+    code: string
+    type: "individual" | "business"
+    commissionType: "flat_per_referral" | "pct_of_fare"
+    commissionValue: number
+  }) => api.post<{ partner: Partner }>("/admin/partners", data),
+  updatePartner: (id: string, data: Partial<{ isActive: boolean; commissionType: string; commissionValue: number }>) =>
+    api.patch<{ partner: Partner }>(`/admin/partners/${id}`, data),
+  recordPartnerPayout: (id: string, data: { amount: number; method: string; note?: string }) =>
+    api.post<{ payout: PartnerPayout }>(`/admin/partners/${id}/payouts`, data),
 }

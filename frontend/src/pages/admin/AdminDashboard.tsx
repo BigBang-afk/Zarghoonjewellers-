@@ -9,6 +9,7 @@ import {
   ClipboardList,
   FileClock,
   Gauge,
+  Handshake,
   LayoutGrid,
   LifeBuoy,
   MapPinned,
@@ -57,6 +58,7 @@ import { BusinessAccountsPanel } from "./BusinessAccountsPanel"
 import { FleetAccountsPanel } from "./FleetAccountsPanel"
 import { PlatformAnalyticsPanel } from "./PlatformAnalyticsPanel"
 import { MarketingCampaignsPanel } from "./MarketingCampaignsPanel"
+import { PartnersPanel } from "./PartnersPanel"
 
 const nav = [
   {
@@ -97,6 +99,7 @@ const nav = [
     items: [
       { label: "Business Accounts", icon: Building2 },
       { label: "Fleet Accounts", icon: Truck },
+      { label: "Partner Program", icon: Handshake },
     ],
   },
   {
@@ -130,7 +133,7 @@ const nav = [
   },
 ]
 
-const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Marketing Campaigns", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Lost & Found", "Business Accounts", "Fleet Accounts", "Analytics", "Passengers", "Drivers", "Ride Requests"])
+const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Marketing Campaigns", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Lost & Found", "Business Accounts", "Fleet Accounts", "Partner Program", "Analytics", "Passengers", "Drivers", "Ride Requests"])
 
 export function AdminDashboard() {
   const { user } = useAuth()
@@ -241,6 +244,8 @@ export function AdminDashboard() {
             <BusinessAccountsPanel />
           ) : active === "Fleet Accounts" ? (
             <FleetAccountsPanel />
+          ) : active === "Partner Program" ? (
+            <PartnersPanel />
           ) : active === "Analytics" ? (
             <PlatformAnalyticsPanel />
           ) : active === "Passengers" ? (

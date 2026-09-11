@@ -7,6 +7,7 @@ import { notify, notifyFromTemplate } from "./notifications/NotificationService.
 import { emitToRide, emitToUser, emitToAdmin } from "../realtime/socket.js"
 import { recordDriverRideForIncentives } from "./incentiveService.js"
 import { qualifyReferralOnFirstRide } from "./referralService.js"
+import { qualifyPartnerReferralOnFirstRide } from "./partnerService.js"
 import { checkCancellationRiskSignal } from "./riskService.js"
 import { addMoney, subtractMoney, multiplyMoney, roundMoney } from "../utils/money.js"
 import { assertValidCancellationReason, applyCancellationPolicy } from "./cancellationService.js"
@@ -306,6 +307,8 @@ async function completeRide(rideId: string) {
     recordDriverRideForIncentives(ride.driverId, ride.rideRequest.cityId, ride.rideRequest.vehicleTypeId),
     qualifyReferralOnFirstRide(ride.passenger.userId),
     qualifyReferralOnFirstRide(ride.driver.userId),
+    qualifyPartnerReferralOnFirstRide(ride.passenger.userId),
+    qualifyPartnerReferralOnFirstRide(ride.driver.userId),
   ])
 
   return { finalFare, commissionAmount, driverPayout }

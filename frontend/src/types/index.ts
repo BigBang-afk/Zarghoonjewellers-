@@ -432,6 +432,48 @@ export interface MarketplaceAnalytics {
   ridesByPaymentMethod: { paymentMethod: string; count: number }[]
 }
 
+export interface Partner {
+  id: string
+  name: string
+  contactName: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+  code: string
+  type: "individual" | "business"
+  commissionType: "flat_per_referral" | "pct_of_fare"
+  commissionValue: number
+  isActive: boolean
+  totalEarned: number
+  totalPaidOut: number
+  createdAt: string
+  _count?: { referrals: number }
+}
+
+export interface PartnerReferral {
+  id: string
+  partnerId: string
+  referredUserId: string
+  status: "pending" | "qualified"
+  commissionEarned: number
+  qualifiedAt: string | null
+  createdAt: string
+  referredUser?: { fullName: string; phone: string; createdAt: string }
+}
+
+export interface PartnerPayout {
+  id: string
+  partnerId: string
+  amount: number
+  method: string
+  note: string | null
+  createdAt: string
+}
+
+export interface PartnerDetail extends Partner {
+  referrals: PartnerReferral[]
+  payouts: PartnerPayout[]
+}
+
 export interface MarketingCampaign {
   id: string
   name: string

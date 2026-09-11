@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from "../../utils/password.js"
 import { issueRefreshToken, revokeRefreshToken, rotateRefreshToken, signAccessToken } from "../../utils/jwt.js"
 import { requestOtp, verifyOtp } from "../../services/otp/OtpService.js"
 import { createReferralCodeForUser, applyReferralCode } from "../../services/referralService.js"
+import { applyPartnerCode } from "../../services/partnerService.js"
 import { sendWelcomeMessage } from "../../services/retentionService.js"
 import { resolvePlatformDefaultCurrency } from "../../shared/currency.js"
 import { enforcePilotModeForRegistration } from "../../services/pilotModeService.js"
@@ -140,8 +141,10 @@ authRouter.post(
         await applyReferralCode(user.id, referredByCode)
         referralApplied = true
       } catch {
-        // Invalid/self-referral codes never block registration — the
-        // passenger just doesn't get credited with a referrer.
+        // Not a personal referral code — try the partner code space
+        // before giving up; either way, an invalid code never blocks
+        // registration.
+        await applyPartnerCode(user.id, referredByCode).catch(() => {})
       }
     }
 
@@ -214,7 +217,8 @@ authRouter.post(
         await applyReferralCode(user.id, referredByCode)
         referralApplied = true
       } catch {
-        // Invalid/self-referral codes never block registration.
+        // Not a personal referral code — try the partner code space.
+        await applyPartnerCode(user.id, referredByCode).catch(() => {})
       }
     }
 

@@ -220,6 +220,9 @@ model User {
   billingContactFor BusinessAccount[] @relation("BusinessBillingContact")
   ownedFleetAccounts FleetAccount[] @relation("FleetOwner")
   marketingCampaignsCreated MarketingCampaign[]
+  partnersCreated  Partner[]
+  partnerReferral  PartnerReferral?
+  partnerPayoutsRecorded PartnerPayout[]
   assignedSafetyEvents SafetyEvent[] @relation("SafetyEventAssignee")
   contentItemsCreated ContentItem[]
   retentionNotifications RetentionNotificationLog[]
@@ -1671,6 +1674,73 @@ model MarketingCampaign {
 // Pilot Mode invitation codes (Phase 4 §37) — only checked when pilot
 // mode + invite-only is turned on via PlatformSetting; harmless otherwise.
 // ---------------------------------------------------------------------
+// Partner program (Phase 5 §19) — an external referrer (business or
+// individual, not necessarily a platform user) with a tracked code,
+// distinct from the passenger/driver personal ReferralCode system.
+// Registration checks a submitted code against ReferralCode first, then
+// falls back to Partner (see referralService.ts's applyPartnerCode) —
+// the two code spaces are both uppercased but otherwise unrelated, so a
+// collision would only occur if an admin deliberately reused a personal
+// referral code as a partner code.
+// ---------------------------------------------------------------------
+
+/// type: individual | business. commissionType: flat_per_referral | pct_of_fare
+model Partner {
+  id              String   @id @default(uuid())
+  name            String
+  contactName     String?
+  contactEmail    String?
+  contactPhone    String?
+  code            String   @unique
+  type            String   @default("individual")
+  commissionType  String   @default("flat_per_referral")
+  commissionValue Float
+  isActive        Boolean  @default(true)
+  /// Lifetime commission earned across all qualified referrals — totalEarned minus totalPaidOut is what's currently owed.
+  totalEarned     Float    @default(0)
+  totalPaidOut    Float    @default(0)
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  createdBy       User?    @relation(fields: [createdById], references: [id])
+  referrals       PartnerReferral[]
+  payouts         PartnerPayout[]
+
+  @@map("partners")
+}
+
+/// status: pending (signed up, hasn't taken a qualifying ride yet) | qualified (commission earned)
+model PartnerReferral {
+  id               String    @id @default(uuid())
+  partnerId        String
+  referredUserId   String    @unique
+  status           String    @default("pending")
+  commissionEarned Float     @default(0)
+  qualifiedAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  partner          Partner   @relation(fields: [partnerId], references: [id])
+  referredUser     User      @relation(fields: [referredUserId], references: [id])
+
+  @@map("partner_referrals")
+}
+
+/// An admin-recorded payment to a partner (bank transfer, cash, etc. — no payment-gateway payout automation for partners, same as PayoutRequest's manual-transfer model).
+model PartnerPayout {
+  id        String   @id @default(uuid())
+  partnerId String
+  amount    Float
+  method    String
+  note      String?
+  paidById  String
+  createdAt DateTime @default(now())
+
+  partner   Partner  @relation(fields: [partnerId], references: [id])
+  paidBy    User     @relation(fields: [paidById], references: [id])
+
+  @@map("partner_payouts")
+}
 
 model InvitationCode {
   id         String   @id @default(uuid())
