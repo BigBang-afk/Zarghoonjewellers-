@@ -16,6 +16,7 @@ import {
   LifeBuoy,
   MapPinned,
   Megaphone,
+  Crown,
   PackageSearch,
   Percent,
   Rocket,
@@ -66,12 +67,14 @@ import { FeatureFlagsPanel } from "./FeatureFlagsPanel"
 import { ExperimentsPanel } from "./ExperimentsPanel"
 import { LaunchModePanel } from "./LaunchModePanel"
 import { SystemStatusPanel } from "./SystemStatusPanel"
+import { CommandCenterPanel } from "./CommandCenterPanel"
 
 const nav = [
   {
     group: "Overview",
     items: [
       { label: "Dashboard", icon: LayoutGrid },
+      { label: "Command Center", icon: Crown },
       { label: "Live Map", icon: MapPinned },
       { label: "Demand Heat Map", icon: Flame },
     ],
@@ -144,7 +147,7 @@ const nav = [
   },
 ]
 
-const FULLY_WIRED = new Set(["Dashboard", "Driver Verification", "Driver Acquisition", "Promotions", "Marketing Campaigns", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Lost & Found", "Business Accounts", "Fleet Accounts", "Partner Program", "Feature Flags", "A/B Tests", "Launch Mode", "System Status", "Analytics", "Passengers", "Drivers", "Ride Requests"])
+const FULLY_WIRED = new Set(["Dashboard", "Command Center", "Driver Verification", "Driver Acquisition", "Promotions", "Marketing Campaigns", "Demand Heat Map", "Dispatch Performance", "Cancellation Patterns", "Lost & Found", "Business Accounts", "Fleet Accounts", "Partner Program", "Feature Flags", "A/B Tests", "Launch Mode", "System Status", "Analytics", "Passengers", "Drivers", "Ride Requests"])
 
 export function AdminDashboard() {
   const { user } = useAuth()
@@ -235,7 +238,9 @@ export function AdminDashboard() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          {active === "Driver Verification" ? (
+          {active === "Command Center" ? (
+            <CommandCenterPanel />
+          ) : active === "Driver Verification" ? (
             <DriverVerificationPanel />
           ) : active === "Driver Acquisition" ? (
             <DriverAcquisitionPanel />

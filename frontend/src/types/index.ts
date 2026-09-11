@@ -432,6 +432,81 @@ export interface MarketplaceAnalytics {
   ridesByPaymentMethod: { paymentMethod: string; count: number }[]
 }
 
+export interface ExecutiveDashboard {
+  filters: { from: string; to: string; cityId: string | null; vehicleTypeId: string | null; paymentMethod: string | null }
+  grossBookingValueRs: number
+  platformRevenueRs: number
+  completedRides: number
+  cancelledRides: number
+  completionRatePct: number
+  cancellationRatePct: number
+  avgFareRs: number
+  avgDriverEtaMin: number
+  activePassengers: number
+  activeDrivers: number
+  repeatRatePct: number
+  driverRetentionPct: number | null
+  supplyDemandRatio: number | null
+  supportTicketsCount: number
+  refundsRs: number
+}
+
+export interface UnitEconomicsMetric {
+  value: number
+  basis: "actual" | "estimate"
+  note?: string
+}
+
+export interface UnitEconomics {
+  filters: { from: string; to: string; cityId: string | null; vehicleTypeId: string | null; paymentMethod: string | null }
+  completedRides: number
+  perRide: {
+    revenuePerRideRs: UnitEconomicsMetric
+    commissionPerRideRs: UnitEconomicsMetric
+    driverPayoutPerRideRs: UnitEconomicsMetric
+    paymentProcessingCostPerRideRs: UnitEconomicsMetric
+    promotionCostPerRideRs: UnitEconomicsMetric
+    refundsPerRideRs: UnitEconomicsMetric
+    contributionMarginPerRideRs: UnitEconomicsMetric
+  }
+  totals: {
+    grossBookingValueRs: number
+    platformRevenueRs: number
+    driverPayoutsRs: number
+    promotionCostRs: number
+    refundsRs: number
+    estimatedPaymentProcessingCostRs: number
+  }
+}
+
+export interface AcquisitionBucket {
+  key: string
+  signups: number
+  firstRideRatePct: number
+  repeatRideRatePct: number
+  retainedPct: number
+  cpaRs: number | null
+}
+
+export interface AcquisitionAnalytics {
+  bySource: AcquisitionBucket[]
+  byCampaign: AcquisitionBucket[]
+  spendRsSupplied: number | null
+}
+
+export interface CohortRow {
+  week: string
+  registered: number
+  firstRideRatePct: number
+  returned7dPct: number
+  returned30dPct: number
+}
+
+export interface CohortAnalytics {
+  role: "passenger" | "driver"
+  cohorts: CohortRow[]
+}
+
 export interface FeatureFlag {
   id: string
   key: string

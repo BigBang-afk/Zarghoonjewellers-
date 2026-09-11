@@ -16,6 +16,10 @@ import type {
   PassengerAnalytics,
   DriverAnalytics,
   MarketplaceAnalytics,
+  ExecutiveDashboard,
+  UnitEconomics,
+  AcquisitionAnalytics,
+  CohortAnalytics,
   MarketingCampaign,
   Partner,
   PartnerDetail,
@@ -133,6 +137,14 @@ export const adminApi = {
   passengerAnalytics: (cityId?: string) => api.get<PassengerAnalytics>("/admin/analytics/passengers", cityId ? { cityId } : undefined),
   driverAnalytics: (cityId?: string) => api.get<DriverAnalytics>("/admin/analytics/drivers", cityId ? { cityId } : undefined),
   marketplaceAnalytics: (cityId?: string) => api.get<MarketplaceAnalytics>("/admin/analytics/marketplace", cityId ? { cityId } : undefined),
+
+  // Executive / business command-center dashboard (Phase 4 §35/§36, wired to a UI in Phase 5 §24)
+  executiveDashboard: (query?: { from?: string; to?: string; cityId?: string; vehicleTypeId?: string; paymentMethod?: string }) =>
+    api.get<ExecutiveDashboard>("/admin/analytics/executive", query),
+  unitEconomics: (query?: { from?: string; to?: string; cityId?: string; vehicleTypeId?: string; paymentMethod?: string }) =>
+    api.get<UnitEconomics>("/admin/analytics/unit-economics", query),
+  acquisitionAnalytics: (query?: { cityId?: string; spendRs?: number }) => api.get<AcquisitionAnalytics>("/admin/analytics/acquisition", query),
+  cohortAnalytics: (query?: { role?: "passenger" | "driver"; weeks?: number }) => api.get<CohortAnalytics>("/admin/analytics/cohorts", query),
 
   // Marketing campaigns (Phase 5 §18)
   campaigns: (status?: string) => api.get<{ campaigns: MarketingCampaign[] }>("/admin/campaigns", status ? { status } : undefined),
