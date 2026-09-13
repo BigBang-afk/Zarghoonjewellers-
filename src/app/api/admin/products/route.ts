@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
+import { put } from "@vercel/blob";
 import { randomUUID } from "crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -80,16 +79,15 @@ export async function POST(req: Request) {
     }
   }
 
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
-  await mkdir(uploadDir, { recursive: true });
-
   const imageUrls: string[] = [];
   for (const file of files) {
     const extension = MIME_EXTENSIONS[file.type];
-    const filename = `${randomUUID()}${extension}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(uploadDir, filename), buffer);
-    imageUrls.push(`/uploads/products/${filename}`);
+    const filename = `products/${randomUUID()}${extension}`;
+    const blob = await put(filename, file, {
+      access: "public",
+      contentType: file.type,
+    });
+    imageUrls.push(blob.url);
   }
 
   const product = await prisma.product.create({

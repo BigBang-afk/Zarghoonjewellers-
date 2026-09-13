@@ -20,16 +20,21 @@ admin panel for managing the product catalogue.
 ## Tech stack
 
 - Next.js (App Router) + TypeScript + Tailwind CSS
-- Prisma ORM + SQLite (`prisma/dev.db`)
+- Prisma ORM + PostgreSQL
+- Vercel Blob for product image storage
 - Auth.js / NextAuth v5 (credentials login, JWT sessions)
 - react-hook-form + zod for form validation
 
 ## Getting started
 
+You need a PostgreSQL database (e.g. a free [Neon](https://neon.tech) or
+Vercel Postgres instance) and a [Vercel Blob](https://vercel.com/docs/storage/vercel-blob)
+read/write token, even for local development.
+
 ```bash
 npm install
-cp .env.example .env   # then set a random AUTH_SECRET
-npm run db:migrate     # creates the SQLite DB and applies the schema
+cp .env.example .env   # fill in DATABASE_URL, AUTH_SECRET, BLOB_READ_WRITE_TOKEN
+npm run db:migrate     # applies the schema to your Postgres database
 npm run db:seed        # seeds the admin account (admin / admin123@)
 npm run dev
 ```
@@ -38,10 +43,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Notes
 
-- Uploaded product images are stored under `public/uploads/products`. This
-  works well for a traditional Node.js deployment (VM, container) but will
-  **not** persist on serverless/ephemeral filesystems (e.g. Vercel) — swap
-  in a cloud storage provider (S3, Cloudinary, etc.) for that kind of
-  deployment.
-- `AUTH_SECRET` in `.env` must be kept private and set to a unique random
-  value in production (`openssl rand -base64 32`).
+- `AUTH_SECRET` must be kept private and set to a unique random value in
+  production (`openssl rand -base64 32`).
+- `BLOB_READ_WRITE_TOKEN` is auto-injected by Vercel once a Blob store is
+  connected to the project; set it manually for local development.
