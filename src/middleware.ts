@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getToken } from "next-auth/jwt";
+import type { NextRequest } from "next/server";
 
-export default auth((req) => {
+export default async function middleware(req: NextRequest) {
+  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
   const { pathname } = req.nextUrl;
-  const role = req.auth?.user?.role;
+  const role = token?.role;
 
   if (pathname.startsWith("/admin") && role !== "ADMIN") {
     const url = req.nextUrl.clone();
@@ -11,12 +13,12 @@ export default auth((req) => {
     return NextResponse.redirect(url);
   }
 
-  if (pathname.startsWith("/dashboard") && !req.auth) {
+  if (pathname.startsWith("/dashboard") && !token) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
-});
+}
 
 export const config = {
   matcher: ["/admin/:path*", "/dashboard/:path*"],
