@@ -2,7 +2,7 @@
   "name": "@zarghoon/core",
   "version": "0.1.0",
   "private": true,
-  "description": "Zarghoon AI core: database-backed business services (products, CRM, conversations, follow-ups, handoff, audit).",
+  "description": "Zarghoon AI core: database-backed business services and the Claude-powered Sales Agent.",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -11,9 +11,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "products:import": "tsx scripts/import-products.ts"
+    "products:import": "tsx scripts/import-products.ts",
+    "sales": "tsx scripts/sales-playground.ts",
+    "sales-agent": "tsx scripts/sales-agent-live.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "csv-parse": "^7.0.3",
     "decimal.js": "^10.6.0",
     "libphonenumber-js": "^1.13.15",

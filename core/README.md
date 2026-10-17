@@ -5,9 +5,10 @@ Jewellers. It is a modular TypeScript monolith over PostgreSQL (Supabase).
 All business facts, rules and audit live here. Future AI agents only call
 these services through validated tools.
 
-**Current phase:** Phase 1, the Sales + CRM + Product Intelligence foundation.
-The Claude Sales Agent, website chat and every social or ads integration are
-**not built yet**, by design.
+**Current phase:** Phase 1, Sales + CRM + Product Intelligence. The CRM
+foundation and the Claude-powered **Sales Agent** are built and run
+internally (tests and a CLI playground). Website chat and every social or
+ads channel are **not connected yet**, by design.
 
 ## What's here
 
@@ -22,8 +23,13 @@ The Claude Sales Agent, website chat and every social or ads integration are
 | Customer 360 | single read model for the future Sales Agent |
 | Handoff | human takeover with reason/urgency, AI replies blocked in code and DB |
 | Approvals & audit | approval workflow for sensitive actions; append-only, redacted audit log |
+| Sales Agent | Claude tool-use agent over the services above, with code-enforced fact grounding and handoffs ([docs/sales-agent.md](docs/sales-agent.md)) |
 
-Read **[docs/crm.md](docs/crm.md)** for the CRM rules in detail.
+Read **[docs/crm.md](docs/crm.md)** for the CRM rules and
+**[docs/sales-agent.md](docs/sales-agent.md)** for the Sales Agent.
+
+Try the agent: `npm run sales` (in-memory demo data; uses Claude when
+`ANTHROPIC_API_KEY` is set, otherwise an offline stand-in).
 
 ## Layout
 
@@ -31,8 +37,10 @@ Read **[docs/crm.md](docs/crm.md)** for the CRM rules in detail.
 core/
   supabase/migrations/   SQL migrations (never edit a committed one; add a new file)
   src/
-    config/              env loading (Zod)
-    database/            Db interface + node-postgres adapter
+    agents/              llm client abstraction + Sales Agent (prompt, tools, executor, validator, safety)
+    config/              env loading, owner-approved business info (Zod)
+    database/            Db interface, node-postgres adapter, in-memory PGlite (dev/test only)
+    demo/                DEMO fixtures and offline demo model
     lib/                 errors, money (decimal), identifiers, redaction, logger, validation
     schemas/             domain types, enums and row mappers
     services/
@@ -45,7 +53,7 @@ core/
   tests/
     unit/                pure logic
     integration/         services against real SQL (in-process PGlite)
-  scripts/               CLIs (product import)
+  scripts/               CLIs (product import, sales playground, live agent check)
   data/                  sample CSV (no real prices)
   docs/                  documentation
 ```

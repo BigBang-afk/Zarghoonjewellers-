@@ -86,3 +86,11 @@ describe("validateImportRows", () => {
     expect(run(csv, true).issues).toEqual([]);
   });
 });
+
+describe("demo SKU protection", () => {
+  it("blocks DEMO- SKUs unless explicitly allowed", () => {
+    const csv = `${HEADER}\nDEMO-NK-001,Demo Necklace,,,,,,,,,,,\n`;
+    expect(run(csv).issues[0]!.message).toMatch(/DEMO- SKUs are blocked/);
+    expect(run(csv, true).issues).toEqual([]);
+  });
+});

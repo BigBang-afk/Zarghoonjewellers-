@@ -23,8 +23,15 @@ export const skuSchema = z
   .transform((s) => s.toUpperCase())
   .pipe(z.string().max(64, "SKU is too long").regex(SKU_PATTERN, "SKU must look like ZJ-BR-001"));
 
+export const DEMO_SKU_PREFIX = "DEMO-";
+
 export function isTestSku(sku: string): boolean {
   return sku.toUpperCase().startsWith(TEST_SKU_PREFIX);
+}
+
+/** Demo fixtures (see src/demo) must never enter the real catalogue through an import. */
+export function isDemoSku(sku: string): boolean {
+  return sku.toUpperCase().startsWith(DEMO_SKU_PREFIX);
 }
 
 /**

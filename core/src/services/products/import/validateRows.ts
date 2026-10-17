@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { currencySchema, moneySchema, weightGramsSchema } from "../../../lib/money.js";
 import {
+  isDemoSku,
   isTestSku,
   METALS,
   skuSchema,
@@ -106,6 +107,13 @@ export function validateImportRows(rows: readonly ParsedRow[], options: Validate
     const v = result.data;
     const consistency = stockConsistencyError(v.stock_status, v.stock_quantity);
     if (consistency) issues.push({ row: row.rowNumber, column: "stock_status", message: consistency });
+    if (!options.allowTestSkus && isDemoSku(v.sku)) {
+      issues.push({
+        row: row.rowNumber,
+        column: "sku",
+        message: "DEMO- SKUs are blocked; they are demo fixtures and must not enter the real catalogue",
+      });
+    }
     if (!options.allowTestSkus && isTestSku(v.sku)) {
       issues.push({
         row: row.rowNumber,
