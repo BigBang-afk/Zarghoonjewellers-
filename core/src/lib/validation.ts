@@ -34,3 +34,16 @@ export const timestampSchema = z.union([
   z.date(),
   z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
 ]);
+
+/**
+ * Text field for PATCH-style updates: absent → undefined (leave unchanged),
+ * null or "" → null (clear), otherwise the trimmed string.
+ */
+export const patchText = (max = 2000) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .transform((s) => (s.length === 0 ? null : s))
+    .nullable()
+    .optional();

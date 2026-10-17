@@ -217,7 +217,7 @@ export function createApprovalService(db: Db) {
 
   return {
     createApprovalRequest,
-    getApproval: (id: string) => loadApproval(db, parseInput(uuidSchema, id, "approval id")),
+    getApproval: async (id: string) => loadApproval(db, parseInput(uuidSchema, id, "approval id")),
     approve: (id: string, ctx: ActionContext, note?: string) => decide(id, "approved", note, ctx),
     reject: (id: string, ctx: ActionContext, note?: string) => decide(id, "rejected", note, ctx),
     cancelApproval,

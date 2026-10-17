@@ -1,5 +1,10 @@
 # Zarghoon Jewellers
 
+> **Zarghoon AI core** — the database-backed business backend (products, CRM,
+> conversations, follow-ups, human handoff, approvals, audit) lives in
+> [`core/`](core/README.md) as a separate TypeScript package. See
+> [`core/docs/crm.md`](core/docs/crm.md).
+
 Public website for Zarghoon Jewellers with customer registration/login and an
 admin panel for managing the product catalogue.
 
