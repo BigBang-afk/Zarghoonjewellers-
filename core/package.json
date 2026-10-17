@@ -1,0 +1,31 @@
+{
+  "name": "@zarghoon/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zarghoon AI core: database-backed business services (products, CRM, conversations, follow-ups, handoff, audit).",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "products:import": "tsx scripts/import-products.ts"
+  },
+  "dependencies": {
+    "csv-parse": "^7.0.3",
+    "decimal.js": "^10.6.0",
+    "libphonenumber-js": "^1.13.15",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

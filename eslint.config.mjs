@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Zarghoon AI core is a separate package with its own toolchain.
+    "core/**",
   ]),
 ]);
 
