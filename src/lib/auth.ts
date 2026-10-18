@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { isBlockedPassword } from "@/lib/security/insecureCredentials";
 import type { UserRole } from "@/types/next-auth";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -20,6 +21,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           typeof credentials?.password === "string" ? credentials.password : "";
 
         if (!username || !password) return null;
+        // Publicly known demo credentials are disabled everywhere this code runs.
+        if (isBlockedPassword(password)) return null;
 
         const user = await prisma.user.findUnique({ where: { username } });
         if (!user) return null;

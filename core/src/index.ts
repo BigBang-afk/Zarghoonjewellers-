@@ -41,3 +41,4 @@ export { createPgDb, type Db } from "./database/db.js";
 export * from "./lib/errors.js";
 export type { ActionContext, Actor, Clock } from "./types/context.js";
 export { computeLeadScore, classifyLeadScore, LEAD_SIGNAL_POINTS } from "./services/crm/leadScoring.js";
+export { createLogger, type Logger } from "./lib/logger.js";

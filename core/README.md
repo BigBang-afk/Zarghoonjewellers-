@@ -6,9 +6,9 @@ All business facts, rules and audit live here. Future AI agents only call
 these services through validated tools.
 
 **Current phase:** Phase 1, Sales + CRM + Product Intelligence. The CRM
-foundation and the Claude-powered **Sales Agent** are built and run
-internally (tests and a CLI playground). Website chat and every social or
-ads channel are **not connected yet**, by design.
+foundation, the Claude-powered **Sales Agent** and the **website chat**
+(demo mode by default in development) are built. WhatsApp, Instagram,
+Facebook, TikTok, Google Business and ads are **not connected**, by design.
 
 ## What's here
 
@@ -24,6 +24,7 @@ ads channel are **not connected yet**, by design.
 | Handoff | human takeover with reason/urgency, AI replies blocked in code and DB |
 | Approvals & audit | approval workflow for sensitive actions; append-only, redacted audit log |
 | Sales Agent | Claude tool-use agent over the services above, with code-enforced fact grounding and handoffs ([docs/sales-agent.md](docs/sales-agent.md)) |
+| Website chat | Session-isolated website channel over the Sales Agent: rate limits, product cards, contact capture ([docs/website-chat.md](docs/website-chat.md)) |
 
 Read **[docs/crm.md](docs/crm.md)** for the CRM rules and
 **[docs/sales-agent.md](docs/sales-agent.md)** for the Sales Agent.

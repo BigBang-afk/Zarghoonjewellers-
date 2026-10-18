@@ -146,7 +146,18 @@ export function createProductService(db: Db) {
     };
   }
 
-  return { getProductById, getProductBySku, getProduct, searchProducts, checkInventory };
+  /** The product's primary catalogue image, or null. Only images stored against the product count. */
+  async function getPrimaryImageUrl(productId: string): Promise<string | null> {
+    const id = parseInput(uuidSchema, productId, "product id");
+    const row = await queryOne<{ url: string }>(
+      db,
+      `select url from product_images where product_id = $1 order by is_primary desc, sort_order, created_at limit 1`,
+      [id],
+    );
+    return row?.url ?? null;
+  }
+
+  return { getProductById, getProductBySku, getProduct, searchProducts, checkInventory, getPrimaryImageUrl };
 }
 
 export type ProductService = ReturnType<typeof createProductService>;

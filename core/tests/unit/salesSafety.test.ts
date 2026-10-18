@@ -12,6 +12,9 @@ describe("keyword backstop", () => {
     ["مجھے شکایت ہے", "complaint"],
     ["I want to talk to a real person", "customer_requested"],
     ["manager se baat karwao", "customer_requested"],
+    ["I want to speak to someone", "customer_requested"],
+    ["can I talk with a person?", "customer_requested"],
+    ["kisi se baat karni hai", "customer_requested"],
     ["my payment failed twice", "payment_issue"],
   ])("%s → %s", (message, reason) => {
     expect(keywordHandoff(message)?.reason).toBe(reason);

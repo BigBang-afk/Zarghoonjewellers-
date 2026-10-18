@@ -25,6 +25,7 @@ export function normalizeEmail(raw: string): string | null {
 
 export const EXTERNAL_IDENTITY_TYPES = [
   "website_visitor",
+  "website_account",
   "instagram",
   "facebook",
   "tiktok",

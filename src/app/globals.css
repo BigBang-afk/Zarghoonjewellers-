@@ -26,6 +26,7 @@
   --color-maroon: var(--maroon);
   --font-sans: var(--font-inter);
   --font-serif: var(--font-playfair);
+  --font-urdu: var(--font-nastaliq), "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", serif;
 }
 
 body {

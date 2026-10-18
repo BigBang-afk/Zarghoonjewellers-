@@ -47,7 +47,7 @@ const KEYWORD_RULES: { reason: HandoffReason; urgency: HandoffUrgency; pattern: 
     reason: "customer_requested",
     urgency: "normal",
     pattern:
-      /\b(real\s?person|human|sales\s?(person|man|woman)|manager|staff\s?(se|member)|kisi\s?(insaan|bande)|call\s?me|mujhe\s?call)\b|کسی\s?سے\s?بات|مینیجر/i,
+      /\b(real\s?person|human|sales\s?(person|man|woman)|manager|staff\s?(se|member)|kisi\s?(insaan|bande)|call\s?me|mujhe\s?call|(speak|talk)\s+(to|with)\s+(someone|somebody|a\s+person|an?\s+(agent|representative))|kisi\s+se\s+baat)\b|کسی\s?سے\s?بات|مینیجر/i,
   },
   {
     reason: "payment_issue",

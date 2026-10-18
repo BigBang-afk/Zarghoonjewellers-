@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Zarghoon AI core runs as plain Node.js ESM on the server only (it uses
+  // pg, the Anthropic SDK and, in demo mode, an in-process WASM PostgreSQL).
+  serverExternalPackages: ["@zarghoon/core", "@electric-sql/pglite"],
 };
 
 export default nextConfig;
