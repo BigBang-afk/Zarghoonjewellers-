@@ -45,6 +45,21 @@ All use the `ZARGHOON_DEMO_PASSWORD` you set.
 7. **Test human handoff** — sign in as `demo-sales`, open *Human Handoffs*, **Take over** the discount request (AI stays paused, the conversation and lead become yours), then **Resolve** — tick "Hand the conversation back to the AI" to let the AI reply again.
 8. **Reset demo data safely** — sign in as `demo-owner` → *Settings* → **Reset demo data**. It only exists in demo mode; the server refuses it in connected mode.
 
+## AI Follow-up Center (Step 9)
+
+Drafts are prepared from verified CRM data and **never sent**. Approving a draft marks it ready for a future, permitted channel. Details: `core/docs/followup-engine.md`.
+
+1. **Open the Follow-up Center** — *AI Follow-ups* in the sidebar. Tabs: Due today, Overdue, Upcoming, Drafts to review, Approved (not sent), Needs attention, Completed, Cancelled, History. "Suggested follow-ups" come from fixed rules.
+2. **Select a customer** — click a name to open the follow-up (or *Open Customer 360*).
+3. **Generate a draft** — *Generate AI draft*. With `ANTHROPIC_API_KEY` set on the server, Claude writes it; otherwise a reviewed template is used and labelled "not AI". Every draft is checked by fixed rules (no unverified prices, discounts, delivery dates, gold rates or stock claims).
+4. **Review** — read the draft, its "why", and the Eligibility panel; edit it (a new version that still needs approval).
+5. **Approve or reject** — *Approve draft* / *Reject draft*. Approved = "Approved — not sent".
+6. **Reschedule** — *Manage → Reschedule*. Customer follow-ups move out of quiet hours (21:00–10:00 Pakistan time by default; owners can change it in Settings).
+7. **Test do-not-contact protection** — open *DEMO Sana Iqbal* (opted out): no follow-ups can be scheduled. Open *DEMO Kamran Shah* as `demo-sales2` (no consent recorded): customer follow-ups are refused until consent is recorded under *Contact permissions*.
+8. **View history** — the *History* tab, each follow-up's draft history and activity log, *Notifications*, and *Analytics* (delivery, response time and conversion are "Not available" because nothing is sent).
+
+Managers can run *Process due follow-ups now*; in connected mode run `npm run followups:worker` (core) from a scheduler.
+
 ## Connected mode (staging or production database)
 
 ```bash

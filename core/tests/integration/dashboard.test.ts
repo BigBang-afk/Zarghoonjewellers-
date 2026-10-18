@@ -17,7 +17,7 @@ const svc = () => createDashboardService(t.db);
 beforeAll(async () => {
   t = await createTestDatabase();
   await t.reset();
-  demo = await seedDashboardDemo(t.db, { password: "demo-password-123" });
+  demo = await seedDashboardDemo(t.db, { password: "demo-password-123", followupEngine: false });
   for (const [k, id] of Object.entries(demo.staff)) v[k] = (await findStaff(t.db, id))!;
 }, 120_000);
 afterAll(() => t.close());

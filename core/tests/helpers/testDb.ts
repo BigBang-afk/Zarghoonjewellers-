@@ -15,12 +15,17 @@ import { createInMemoryDb } from "../../src/database/pgliteDb.js";
  */
 
 const ALL_TABLES = [
+  "notification_reads",
+  "notifications",
+  "followup_drafts",
   "agent_actions",
   "handoffs",
   "lead_signal_events",
   "product_interests",
   "product_source_links",
   "followups",
+  "followup_enrollments",
+  "followup_settings",
   "messages",
   "conversations",
   "order_items",

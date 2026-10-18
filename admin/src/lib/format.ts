@@ -131,3 +131,8 @@ export function utcToZonedLocal(date: Date, timeZone = TIMEZONE): string {
 export function defaultFollowupLocal(now: Date = new Date()): string {
   return `${utcToZonedLocal(new Date(now.getTime() + 24 * 3_600_000)).slice(0, 10)}T11:00`;
 }
+
+/** A fresh key for one form render, so a double-submitted form is processed once. */
+export function newRequestKey(): string {
+  return globalThis.crypto.randomUUID();
+}

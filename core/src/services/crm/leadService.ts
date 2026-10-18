@@ -19,6 +19,7 @@ import {
 } from "../../schemas/crm.js";
 import type { ActionContext } from "../../types/context.js";
 import { recordAction } from "../auditService.js";
+import { stopLeadSequencesTx } from "../followupEngine/hooks.js";
 import { assertAssignableStaff, requireStaffActor } from "../staffRules.js";
 import { computeLeadScore, LEAD_SIGNALS, type LeadScoreResult, type LeadSignal } from "./leadScoring.js";
 import {
@@ -246,6 +247,7 @@ export function createLeadService(db: Db) {
         { customerId: lead.customerId, leadId: id, types: ["sales"] },
         `cancelled: lead ${outcome}`,
       );
+      await stopLeadSequencesTx(tx, id, `lead_${outcome}`);
       await recordAction(tx, ctx, {
         actionType: `lead_${outcome}`,
         customerId: lead.customerId,

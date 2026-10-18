@@ -3,6 +3,9 @@ import { describeDatabase, planMigrations } from "../database/migrator.js";
 import { createZarghoonCore, type ZarghoonCore } from "../index.js";
 import { createDashboardActions, type DashboardActions } from "../services/dashboard/dashboardActions.js";
 import { createDashboardService, type DashboardService } from "../services/dashboard/dashboardService.js";
+import { createFollowupCenter, type FollowupCenter } from "../services/dashboard/followupCenter.js";
+import { createAnthropicLlmClient, loadLlmConfig } from "../agents/llm/llmClient.js";
+import { createClaudeDrafter, createTemplateDrafter, type FollowupDrafter } from "../services/followupEngine/drafting.js";
 import { createStaffAuthService, type StaffAuthService } from "../services/staffAuth/staffAuthService.js";
 import { resolveDashboardConfig, type DashboardConfig } from "./config.js";
 
@@ -23,7 +26,18 @@ export interface DashboardRuntime {
   auth: StaffAuthService;
   dashboard: DashboardService;
   actions: DashboardActions;
+  followups: FollowupCenter;
+  drafter: { kind: "ai" | "template"; model: string };
   close(): Promise<void>;
+}
+
+/** Claude when configured (server-side key only), else the offline templates. */
+export function createDrafterFromEnv(env: NodeJS.ProcessEnv, choice: "claude" | "template"): FollowupDrafter {
+  if (choice === "template") return createTemplateDrafter();
+  const config = loadLlmConfig(env);
+  // Short drafts: modest effort; the model id and fallbacks come from the shared config.
+  const effort = (["low", "medium", "high"] as const).find((e) => e === env.FOLLOWUP_DRAFT_EFFORT) ?? "low";
+  return createClaudeDrafter(createAnthropicLlmClient({ ...config, effort, maxTokens: 4000 }));
 }
 
 /**
@@ -76,6 +90,7 @@ export async function createDashboardRuntime(env: NodeJS.ProcessEnv = process.en
     environmentLabel = config.expectedEnvironment!;
   }
 
+  const drafter = createDrafterFromEnv(env, config.drafter);
   return {
     config,
     mode: config.mode,
@@ -84,7 +99,9 @@ export async function createDashboardRuntime(env: NodeJS.ProcessEnv = process.en
     core: createZarghoonCore({ db }),
     auth: createStaffAuthService(db),
     dashboard: createDashboardService(db, { timezone: config.timezone }),
-    actions: createDashboardActions(db),
+    actions: createDashboardActions(db, { drafter }),
+    followups: createFollowupCenter(db),
+    drafter: { kind: drafter.kind, model: drafter.model },
     close,
   };
 }

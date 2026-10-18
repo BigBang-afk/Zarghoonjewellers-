@@ -4,6 +4,7 @@ import type { LeadSignal } from "../services/crm/leadScoring.js";
 import { createStaffAuthService } from "../services/staffAuth/staffAuthService.js";
 import type { ActionContext } from "../types/context.js";
 import { seedDemoData } from "./demoData.js";
+import { LlmProviderError } from "../agents/llm/llmClient.js";
 
 /**
  * Fake business data for the management dashboard's DEMO mode.
@@ -24,6 +25,15 @@ export const DEMO_STAFF = [
 ] as const;
 export type DemoStaffKey = (typeof DEMO_STAFF)[number]["key"];
 
+type DemoCustomerFn = (
+  key: string,
+  data: { name: string | null; city?: string; language?: "english" | "urdu" | "roman_urdu"; phoneSuffix?: string; visitor?: boolean },
+  assigned: DemoStaffKey | null,
+  signals: LeadSignal[],
+  chat: [sender: "customer" | "ai" | "staff" | "system", text: string][],
+  budget?: string,
+) => Promise<void>;
+
 export interface DashboardDemoResult {
   staff: Record<DemoStaffKey, string>;
   customers: Record<string, string>;
@@ -33,7 +43,17 @@ export interface DashboardDemoResult {
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
-export async function seedDashboardDemo(db: Db, options: { password: string; now?: Date }): Promise<DashboardDemoResult> {
+/** A time later today in Pakistan (Asia/Karachi, UTC+5, no DST) — halfway to midnight, so it always counts as "today". */
+export function laterToday(now: Date): Date {
+  const PKT = 5 * HOUR;
+  const nextMidnight = Math.floor((now.getTime() + PKT) / DAY) * DAY + DAY - PKT;
+  return new Date(now.getTime() + Math.max(60_000, Math.floor((nextMidnight - now.getTime()) / 2)));
+}
+
+export async function seedDashboardDemo(
+  db: Db,
+  options: { password: string; now?: Date; /** Step 9 follow-up engine data (default true). */ followupEngine?: boolean },
+): Promise<DashboardDemoResult> {
   const now = options.now ?? new Date();
   const { productIds, staffId: managerId } = await seedDemoData(db);
   const core = createZarghoonCore({ db, clock: () => now });
@@ -230,7 +250,7 @@ export async function seedDashboardDemo(db: Db, options: { password: string; now
   // --- Follow-ups: today, overdue, upcoming, completed, cancelled --------------------------------
   const past = createZarghoonCore({ db, clock: () => new Date(now.getTime() - 3 * DAY) });
   await core.followups.scheduleFollowup(
-    { customerId: customers.ayesha!, leadId: leads.ayesha, assignedStaffId: staff.ali, scheduledFor: new Date(now.getTime() + 2 * HOUR), note: "DEMO — confirm Saturday store visit" },
+    { customerId: customers.ayesha!, leadId: leads.ayesha, assignedStaffId: staff.ali, scheduledFor: laterToday(now), note: "DEMO — confirm Saturday store visit" },
     staffCtx("ali"),
   );
   await past.followups.scheduleFollowup(
@@ -282,5 +302,105 @@ export async function seedDashboardDemo(db: Db, options: { password: string; now
   );
   await core.approvals.reject(marketing.id, staffCtx("owner"), "DEMO — not this season");
 
-  return { staff, customers, leads };
+  const result = { staff, customers, leads };
+  if (options.followupEngine ?? true) await seedFollowupEngineDemo(db, result, now, customer, productIds);
+  return result;
+}
+
+/**
+ * Step 9 demo data: consent records, engine follow-ups in every state, a
+ * Day 1/3/7 sequence, drafts (pending and approved) and a genuinely failed
+ * processing job — all produced by the real engine and worker. Nothing is sent.
+ */
+async function seedFollowupEngineDemo(
+  db: Db,
+  demo: DashboardDemoResult,
+  now: Date,
+  customer: DemoCustomerFn,
+  productIds: Record<string, string>,
+): Promise<void> {
+  const { createFollowupEngine } = await import("../services/followupEngine/engineService.js");
+  const { createFollowupWorker } = await import("../services/followupEngine/worker.js");
+  const { createTemplateDrafter } = await import("../services/followupEngine/drafting.js");
+  const staffCtx = (key: DemoStaffKey): ActionContext => ({ actor: { type: "staff", staffId: demo.staff[key] } });
+  const engine = createFollowupEngine(db, { clock: () => now });
+  const c = demo.customers;
+
+  // A new bridal prospect for the sequence demo.
+  await customer(
+    "mariam",
+    { name: "DEMO Mariam Siddiqui (fake)", city: "Lahore", language: "roman_urdu", phoneSuffix: "0009" },
+    "ali",
+    ["asked_price", "specific_product_interest"],
+    [["customer", "Bridal set dekhna hai, shaadi March mein hai."], ["ai", "Here is what I found: DEMO Bridal Kundan Necklace Set — PKR 485,000"]],
+  );
+  await createZarghoonCore({ db }).productInterests.recordProductInterest(
+    { customerId: c.mariam!, productId: productIds["DEMO-NK-001"], interestType: "viewed" },
+    { actor: { type: "ai", agentName: "sales_agent" } },
+  );
+
+  // Consent: recorded by staff for most demo customers. Kamran and the visitor stay "unknown".
+  for (const key of ["ayesha", "bilal", "hina", "usman", "fatima", "mariam"] as const) {
+    await engine.setContactConsent(c[key], "granted", "DEMO — customer agreed to WhatsApp updates in store", staffCtx("manager"));
+  }
+
+  // Give the Step 8 follow-ups their purposes and priorities.
+  const tag = async (customerKey: string, purpose: string, priority: string, sku?: string) =>
+    db.query(`update followups set purpose = $2, priority = $3, product_id = coalesce($4, product_id) where customer_id = $1`, [
+      c[customerKey],
+      purpose,
+      priority,
+      sku ? productIds[sku] : null,
+    ]);
+  await tag("ayesha", "bridal", "high", "DEMO-NK-001");
+  await tag("bilal", "price_inquiry", "high", "DEMO-BG-002");
+  await tag("usman", "product_interest", "normal", "DEMO-RG-001");
+  await tag("kamran", "product_interest", "low", "DEMO-ER-001");
+  await tag("fatima", "post_purchase_care", "normal", "DEMO-ER-001");
+  await tag("sana", "price_inquiry", "normal");
+
+  // A draft awaiting review (Ayesha) and an approved one (Usman) — ready for a future channel, not sent.
+  const followupOf = async (key: string) =>
+    (await db.query<{ id: string }>(`select id from followups where customer_id = $1 and status = 'pending' order by created_at limit 1`, [c[key]]))[0]!.id;
+  await engine.generateDraft(await followupOf("ayesha"), staffCtx("ali"), { sourceEventKey: "demo:ayesha" });
+  const usmanDraft = await engine.generateDraft(await followupOf("usman"), staffCtx("ali"), { sourceEventKey: "demo:usman" });
+  await engine.approveDraft(usmanDraft.id, staffCtx("manager"), "DEMO — approved for when WhatsApp is connected");
+
+  // Due follow-ups the worker will meet: Hina is under human takeover; the visitor needs a callback.
+  const earlier = createFollowupEngine(db, { clock: () => new Date(now.getTime() - 2 * DAY) });
+  await earlier.scheduleFollowup(
+    { customerId: c.hina!, purpose: "visit_request", priority: "high", delayDays: 1, idempotencyKey: "demo-hina-visit", note: "DEMO — offer a store visit" },
+    staffCtx("manager"),
+  );
+  await earlier.scheduleFollowup(
+    { customerId: c.visitor!, purpose: "staff_callback", priority: "urgent", delayDays: 1, idempotencyKey: "demo-visitor-callback", note: "DEMO — call back about the request" },
+    staffCtx("manager"),
+  );
+
+  // A Day 1 / 3 / 7 bridal sequence for Mariam (only step 1 exists until it is handled).
+  await engine.enrollSequence(
+    { customerId: c.mariam!, purpose: "bridal", productId: productIds["DEMO-NK-001"], stepDays: [1, 3, 7], idempotencyKey: "demo-mariam-bridal-seq" },
+    staffCtx("ali"),
+  );
+
+  // The regular worker run: drafts Bilal's overdue follow-up, holds Hina's (takeover), raises the callback reminder.
+  await createFollowupWorker(db, { clock: () => now, drafter: createTemplateDrafter(), workerId: "demo-worker" }).runOnce();
+
+  // A review request whose drafting genuinely fails (writer unavailable) until retries are exhausted.
+  await earlier.scheduleFollowup(
+    { customerId: c.fatima!, purpose: "review_request", delayDays: 1, idempotencyKey: "demo-fatima-review" },
+    staffCtx("ali"),
+  );
+  const failing = {
+    kind: "ai" as const,
+    model: "demo-unavailable-writer",
+    draft: async (): Promise<never> => {
+      throw new LlmProviderError("DEMO — model provider unavailable", true);
+    },
+  };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // Let the retry back-off pass (it is the only due follow-up left for this writer).
+    await db.query(`update followups set locked_until = null where customer_id = $1 and purpose = 'review_request'`, [c.fatima]);
+    await createFollowupWorker(db, { clock: () => now, drafter: failing, workerId: "demo-failing" }).runOnce();
+  }
 }

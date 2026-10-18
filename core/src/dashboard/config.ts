@@ -11,6 +11,10 @@ import { passwordSchema } from "../services/staffAuth/staffAuthService.js";
  *              demo-* users with ZARGHOON_DEMO_PASSWORD (you choose it; ≥12 chars).
  *  connected:  ZARGHOON_CORE_DATABASE_URL + ZARGHOON_DASHBOARD_DB_ENV (the
  *              environment label the database must carry: development|staging|production).
+ *
+ *  ZARGHOON_FOLLOWUP_DRAFTER "claude" | "template" — who writes follow-up drafts.
+ *                            Default: Claude when ANTHROPIC_API_KEY is set, otherwise
+ *                            the offline templates (labelled "not AI" in the dashboard).
  */
 
 export type DashboardMode = "demo" | "connected" | "unconfigured";
@@ -24,6 +28,7 @@ export interface DashboardConfig {
   demoPassword: string | null;
   timezone: string;
   secureCookies: boolean;
+  drafter: "claude" | "template";
 }
 
 export function resolveDashboardConfig(env: NodeJS.ProcessEnv): DashboardConfig {
@@ -33,6 +38,7 @@ export function resolveDashboardConfig(env: NodeJS.ProcessEnv): DashboardConfig 
     demoPassword: null,
     timezone: env.ZARGHOON_BUSINESS_TIMEZONE?.trim() || "Asia/Karachi",
     secureCookies: env.NODE_ENV === "production",
+    drafter: (env.ZARGHOON_FOLLOWUP_DRAFTER === "template" || !env.ANTHROPIC_API_KEY?.trim() ? "template" : "claude") as "claude" | "template",
   };
   const off = (problem: string): DashboardConfig => ({ ...base, mode: "unconfigured", problem });
   const mode = env.ZARGHOON_DASHBOARD_MODE?.trim();

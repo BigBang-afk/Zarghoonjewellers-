@@ -37,7 +37,8 @@
     "products:sync": "tsx scripts/products-sync.ts",
     "crm:report": "tsx scripts/crm-report.ts",
     "approvals": "tsx scripts/approvals.ts",
-    "staff:account": "tsx scripts/staff-account.ts"
+    "staff:account": "tsx scripts/staff-account.ts",
+    "followups:worker": "tsx scripts/followups-worker.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

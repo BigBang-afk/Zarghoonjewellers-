@@ -1,4 +1,5 @@
 import { queryOne, type Db } from "../../database/db.js";
+import { haltAllOutreachTx } from "../followupEngine/hooks.js";
 import {
   ConversationNotFoundError,
   CustomerNotFoundError,
@@ -208,7 +209,8 @@ export async function applyDoNotContactTx(tx: Db, customerId: string, ctx: Actio
       where customer_id = $1 and status not in ('won', 'lost', 'do_not_contact') returning id`,
     [customerId],
   );
-  const cancelledFollowups = await cancelPendingFollowupsTx(tx, { customerId }, "cancelled: do_not_contact");
+  // Every pending follow-up is cancelled and follow-up sequences stop.
+  const cancelledFollowups = await haltAllOutreachTx(tx, customerId, "cancelled: do_not_contact");
   await recordAction(tx, ctx, {
     actionType: "do_not_contact_set",
     customerId,

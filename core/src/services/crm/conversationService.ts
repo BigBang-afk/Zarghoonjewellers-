@@ -24,6 +24,7 @@ import {
 } from "../../schemas/crm.js";
 import type { ActionContext } from "../../types/context.js";
 import { recordAction } from "../auditService.js";
+import { onCustomerReplyTx } from "../followupEngine/hooks.js";
 import { assertAssignableStaff, requireStaffActor } from "../staffRules.js";
 import { assertLeadBelongsTo, loadConversation, loadCustomer, loadLead } from "./shared.js";
 
@@ -228,6 +229,10 @@ export function createConversationService(db: Db) {
             conversation.customerId,
             message.createdAt,
           ]);
+        }
+        if (conversation.customerId && data.direction === "inbound") {
+          // The customer replied: outstanding outreach goes back to staff for review.
+          await onCustomerReplyTx(tx, conversation.customerId, message.createdAt, ctx);
         }
         if (conversation.leadId && data.direction === "inbound") {
           await tx.query(

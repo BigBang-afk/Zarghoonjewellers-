@@ -44,3 +44,6 @@ export * from "./lib/errors.js";
 export type { ActionContext, Actor, Clock } from "./types/context.js";
 export { computeLeadScore, classifyLeadScore, LEAD_SIGNAL_POINTS } from "./services/crm/leadScoring.js";
 export { createLogger, type Logger } from "./lib/logger.js";
+export { createFollowupEngine, type FollowupEngine } from "./services/followupEngine/engineService.js";
+export { createFollowupWorker, type FollowupWorker, type WorkerRunSummary } from "./services/followupEngine/worker.js";
+export { createClaudeDrafter, createTemplateDrafter, type FollowupDrafter } from "./services/followupEngine/drafting.js";

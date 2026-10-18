@@ -56,10 +56,11 @@ test.describe("owner views (fresh demo data)", () => {
   test("overview shows counted metrics, pipeline and activity", async ({ page }) => {
     await login(page, "demo-owner");
     await expect(page.getByTestId("demo-banner")).toBeVisible();
-    await expect(stat(page, "Customers")).toContainText("9");
+    await expect(stat(page, "Customers")).toContainText("10");
     await expect(stat(page, "Very hot leads")).toContainText("1");
     await expect(stat(page, "Hot leads")).toContainText("1");
-    await expect(stat(page, "Overdue follow-ups")).toContainText("1");
+    // Bilal's price inquiry, Hina's visit (on hold), the visitor's callback and Fatima's failed review request.
+    await expect(stat(page, "Overdue follow-ups")).toContainText("4");
     await expect(stat(page, "Human handoffs")).toContainText("2");
     await expect(stat(page, "Low stock")).toContainText("1");
     await expect(stat(page, "Revenue")).toContainText("PKR 98,000");
@@ -70,7 +71,7 @@ test.describe("owner views (fresh demo data)", () => {
   test("customers: search, then Customer 360 with score breakdown and message senders", async ({ page }) => {
     await login(page, "demo-owner");
     await page.goto("/customers");
-    await expect(page.getByTestId("customer-row")).toHaveCount(9);
+    await expect(page.getByTestId("customer-row")).toHaveCount(10);
     await page.getByLabel("Search customers").fill("ayesha");
     await page.getByRole("button", { name: "Apply" }).click();
     await expect(page.getByTestId("customer-row")).toHaveCount(1);
@@ -138,7 +139,7 @@ test.describe("salesperson permissions and actions", () => {
 
     await login(page, "demo-sales");
     await page.goto("/customers");
-    await expect(page.getByTestId("customer-row")).toHaveCount(4);
+    await expect(page.getByTestId("customer-row")).toHaveCount(5); // Ayesha, Usman, Fatima, Sana, Mariam
     await expect(page.getByText("DEMO Bilal Ahmed")).toHaveCount(0);
     await page.goto(bilalHref!);
     await expect(page.getByTestId("not-found")).toBeVisible();
@@ -162,7 +163,7 @@ test.describe("salesperson permissions and actions", () => {
     await page.goto("/customers?q=usman");
     await page.getByRole("link", { name: "DEMO Usman Tariq (fake)" }).click();
     const form = page.getByTestId("schedule-followup");
-    await form.getByRole("combobox").selectOption("service");
+    await form.getByLabel("Follow-up type").selectOption("staff_callback");
     await form.getByPlaceholder("What to follow up about").fill("Ring resizing");
     await form.getByRole("button", { name: "Schedule follow-up" }).click();
     await expect(page.getByTestId("toast").last()).toContainText("Follow-up scheduled");

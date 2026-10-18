@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { can } from "@zarghoon/core/dashboard";
 import { ActionForm } from "@/components/ActionForm";
-import { ScheduleFollowupForm, ScoreBreakdown } from "@/components/crm";
+import { ScoreBreakdown } from "@/components/crm";
+import { SmartFollowupForm } from "@/components/followups";
 import { Badge, Card, DefinitionList, inputClass, LeadScore, LeadStatusBadge, Money, PageHeader } from "@/components/ui";
 import { addLeadNoteAction, assignLeadAction, markLeadLostAction, markLeadWonAction } from "@/lib/actions";
-import { formatDateTime, humanize } from "@/lib/format";
+import { formatDateTime, humanize, newRequestKey } from "@/lib/format";
 import { orNotFound, pageContext } from "@/lib/page";
 
 export const dynamic = "force-dynamic";
@@ -76,13 +77,13 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                 </li>
               ))}
             </ul>
-            <ScheduleFollowupForm
+            <SmartFollowupForm
               customerId={lead.customerId}
               leadId={lead.id}
               staff={staff}
               canAssignOthers={can.assignOthers(viewer)}
               viewerId={viewer.id}
-              defaultAssigneeId={lead.assignedStaffId}
+              requestKey={newRequestKey()}
               disabledReason={d.doNotContact ? "This customer asked not to be contacted." : closed ? "Closed leads cannot get new sales follow-ups." : null}
             />
           </Card>

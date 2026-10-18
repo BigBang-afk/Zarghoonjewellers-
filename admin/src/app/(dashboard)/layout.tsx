@@ -15,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await requireSession();
   const viewer = session.staff;
   const rt = status.runtime;
-  const overview = await rt.dashboard.getOverview(viewer);
+  const [overview, unreadNotifications] = await Promise.all([rt.dashboard.getOverview(viewer), rt.followups.unreadCount(viewer)]);
 
   const items: NavItem[] = [
     { href: "/", label: "Overview" },
@@ -23,9 +23,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: "/leads", label: "Leads" },
     { href: "/conversations", label: "Conversations" },
     { href: "/products", label: "Products" },
-    { href: "/followups", label: "Follow-ups", count: overview.overdueFollowups },
+    { href: "/followups", label: "AI Follow-ups", count: overview.overdueFollowups },
     { href: "/handoffs", label: "Human Handoffs", count: overview.openHandoffs },
     { href: "/orders", label: "Orders", note: "read-only" },
+    { href: "/notifications", label: "Notifications", count: unreadNotifications },
     ...(can.decideApprovals(viewer) ? [{ href: "/approvals", label: "Approvals" }] : []),
     ...(can.viewAudit(viewer) ? [{ href: "/activity", label: "Activity Log" }] : []),
     { href: "/settings", label: "Settings" },

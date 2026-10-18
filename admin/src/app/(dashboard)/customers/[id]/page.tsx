@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { can } from "@zarghoon/core/dashboard";
-import { MessageThread, ScheduleFollowupForm, ScoreBreakdown } from "@/components/crm";
+import { ActionForm } from "@/components/ActionForm";
+import { MessageThread, ScoreBreakdown } from "@/components/crm";
+import { ConsentForm, PriorityBadge, ProcessingBadge, SmartFollowupForm } from "@/components/followups";
 import { Badge, Card, DefinitionList, EmptyState, LeadStatusBadge, Money, PageHeader, Table, Td, Th } from "@/components/ui";
-import { formatDateTime, formatMoney, HANDOFF_REASON_LABELS, humanize } from "@/lib/format";
+import { requestTakeoverAction, setIdentityReviewAction } from "@/lib/actions";
+import { formatDateTime, formatMoney, HANDOFF_REASON_LABELS, humanize, newRequestKey } from "@/lib/format";
 import { orNotFound, pageContext } from "@/lib/page";
 
 export const dynamic = "force-dynamic";
@@ -197,15 +200,42 @@ export default async function Customer360Page({ params }: { params: Promise<{ id
             )}
           </Card>
 
+          <Card title="Contact permissions">
+            <p className="mb-3 text-sm" data-testid="consent-status">
+              Messaging consent: <strong>{humanize(customer.contactConsent)}</strong>
+              {customer.contactConsentSource ? <span className="text-xs text-muted"> — {customer.contactConsentSource}</span> : null}
+            </p>
+            {c.doNotContact ? (
+              <p className="text-sm text-danger">Do not contact: no follow-ups of any kind.</p>
+            ) : (
+              <>
+                <ConsentForm customerId={customer.id} consent={customer.contactConsent} />
+                <ActionForm
+                  action={setIdentityReviewAction}
+                  hidden={{ customerId: customer.id, required: customer.identityReviewRequired ? "false" : "true" }}
+                  submitLabel={customer.identityReviewRequired ? "Clear identity review" : "Flag identity for review"}
+                  variant="secondary"
+                  className="mt-3"
+                  testId="identity-review"
+                />
+                {customer.identityReviewRequired ? <p className="mt-1 text-xs text-danger">Identity under review: outreach is paused.</p> : null}
+              </>
+            )}
+            <p className="mt-3 text-xs text-muted">Automated follow-up drafts are only prepared for customers who gave consent.</p>
+            {c.recentConversations.some((v) => v.status === "open") && !c.humanTakeoverStatus.active ? (
+              <ActionForm action={requestTakeoverAction} hidden={{ customerId: customer.id }} submitLabel="Request human takeover" variant="secondary" className="mt-3" testId="request-takeover" />
+            ) : null}
+          </Card>
+
           <Card title="Follow-ups">
             {c.pendingFollowups.length ? (
               <ul className="mb-4 space-y-2 text-sm">
                 {c.pendingFollowups.map((f) => (
                   <li key={f.id} className="rounded-lg bg-ivory p-2">
-                    <p className="font-medium">{formatDateTime(f.scheduledFor)}</p>
-                    <p className="text-xs text-muted">
-                      {humanize(f.followupType)}
-                      {f.note ? ` · ${f.note}` : ""}
+                    <Link href={`/followups/${f.id}`} className="font-medium text-emerald-800 hover:underline">{formatDateTime(f.scheduledFor)}</Link>
+                    <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                      {humanize(f.purpose ?? f.followupType)} <PriorityBadge priority={f.priority} /> <ProcessingBadge state={f.processingState} status={f.status} />
+                      {f.note ? <span>· {f.note}</span> : null}
                     </p>
                   </li>
                 ))}
@@ -213,15 +243,19 @@ export default async function Customer360Page({ params }: { params: Promise<{ id
             ) : (
               <p className="mb-4 text-sm text-muted">No pending follow-ups.</p>
             )}
-            <ScheduleFollowupForm
-              customerId={customer.id}
-              leadId={lead?.id}
-              staff={staff}
-              canAssignOthers={can.assignOthers(viewer)}
-              viewerId={viewer.id}
-              defaultAssigneeId={c.assignedStaff?.id}
-              disabledReason={c.doNotContact ? "This customer asked not to be contacted. Follow-ups cannot be scheduled." : null}
-            />
+            <div id="schedule">
+              <SmartFollowupForm
+                customerId={customer.id}
+                leadId={lead?.id}
+                productId={c.productInterests[0]?.productId}
+                defaultPurpose={c.productInterests.length ? "product_interest" : "new_inquiry"}
+                staff={staff}
+                canAssignOthers={can.assignOthers(viewer)}
+                viewerId={viewer.id}
+                requestKey={newRequestKey()}
+                disabledReason={c.doNotContact ? "This customer asked not to be contacted. Follow-ups cannot be scheduled." : null}
+              />
+            </div>
             {c.followupHistory.some((f) => f.status !== "pending") ? (
               <details className="mt-4 text-sm">
                 <summary className="cursor-pointer text-muted">History</summary>

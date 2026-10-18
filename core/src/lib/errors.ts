@@ -176,7 +176,15 @@ export type FollowupRejectionReason =
   | "scheduled_too_far_ahead"
   | "do_not_contact"
   | "lead_closed"
-  | "not_pending";
+  | "not_pending"
+  | "consent_missing"
+  | "consent_denied"
+  | "identity_review"
+  | "human_takeover"
+  | "customer_replied"
+  | "no_purchase"
+  | "frequency_limit"
+  | "not_reviewable";
 
 export class FollowupNotAllowedError extends AppError {
   readonly code = "FOLLOWUP_NOT_ALLOWED";

@@ -14,6 +14,8 @@ const envLimit = (name: string, fallback: number) => {
 const LOGIN_PER_ADDRESS: RateRule = { name: "login_address", limit: envLimit("ZARGHOON_DASHBOARD_LOGINS_PER_MINUTE", 10), windowMs: 60_000 };
 const LOGIN_PER_USERNAME: RateRule = { name: "login_username", limit: envLimit("ZARGHOON_DASHBOARD_LOGINS_PER_HOUR", 20), windowMs: 60 * 60_000 };
 const ACTIONS_PER_STAFF: RateRule = { name: "staff_actions", limit: 60, windowMs: 60_000 };
+// Each draft request may call the model: a tighter, cost-protecting limit.
+const DRAFTS_PER_STAFF: RateRule = { name: "draft_generation", limit: envLimit("ZARGHOON_DRAFTS_PER_MINUTE", 10), windowMs: 60_000 };
 
 export const allowLogin = (address: string, username: string) =>
   limiter.check([
@@ -22,3 +24,5 @@ export const allowLogin = (address: string, username: string) =>
   ]);
 
 export const allowStaffAction = (staffId: string) => limiter.check([{ rule: ACTIONS_PER_STAFF, key: staffId }]);
+
+export const allowDraftGeneration = (staffId: string) => limiter.check([{ rule: DRAFTS_PER_STAFF, key: staffId }]);

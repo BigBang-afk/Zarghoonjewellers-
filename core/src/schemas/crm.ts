@@ -30,9 +30,18 @@ export interface Customer {
   lastContactAt: Date | null;
   doNotContact: boolean;
   doNotContactAt: Date | null;
+  /** Messaging consent recorded by staff. "unknown" blocks automated outreach. */
+  contactConsent: ContactConsent;
+  contactConsentAt: Date | null;
+  contactConsentSource: string | null;
+  /** Set when identity matching is in doubt; blocks automated outreach until resolved. */
+  identityReviewRequired: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
+
+export const CONTACT_CONSENTS = ["unknown", "granted", "denied"] as const;
+export type ContactConsent = (typeof CONTACT_CONSENTS)[number];
 
 export interface CustomerRow {
   id: string;
@@ -46,6 +55,10 @@ export interface CustomerRow {
   last_contact_at: Date | null;
   do_not_contact: boolean;
   do_not_contact_at: Date | null;
+  contact_consent: ContactConsent;
+  contact_consent_at: Date | null;
+  contact_consent_source: string | null;
+  identity_review_required: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -63,6 +76,10 @@ export function mapCustomerRow(r: CustomerRow): Customer {
     lastContactAt: r.last_contact_at,
     doNotContact: r.do_not_contact,
     doNotContactAt: r.do_not_contact_at,
+    contactConsent: r.contact_consent,
+    contactConsentAt: r.contact_consent_at,
+    contactConsentSource: r.contact_consent_source,
+    identityReviewRequired: r.identity_review_required,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -313,6 +330,24 @@ export type FollowupStatus = (typeof FOLLOWUP_STATUSES)[number];
 export const FOLLOWUP_TYPES = ["sales", "after_sales", "order_update", "service", "other"] as const;
 export type FollowupType = (typeof FOLLOWUP_TYPES)[number];
 
+export const FOLLOWUP_PURPOSES = [
+  "new_inquiry",
+  "product_interest",
+  "bridal",
+  "price_inquiry",
+  "availability_inquiry",
+  "visit_request",
+  "custom_order",
+  "staff_callback",
+  "post_purchase_care",
+  "review_request",
+] as const;
+export type FollowupPurpose = (typeof FOLLOWUP_PURPOSES)[number];
+export const FOLLOWUP_PRIORITIES = ["low", "normal", "high", "urgent"] as const;
+export type FollowupPriority = (typeof FOLLOWUP_PRIORITIES)[number];
+export const PROCESSING_STATES = ["scheduled", "processing", "awaiting_review", "approved", "reminder_due", "blocked", "failed"] as const;
+export type ProcessingState = (typeof PROCESSING_STATES)[number];
+
 export interface Followup {
   id: string;
   customerId: string;
@@ -332,6 +367,20 @@ export interface Followup {
   cancelledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /** Follow-up engine fields (null/defaults for follow-ups created before Step 9). */
+  purpose: FollowupPurpose | null;
+  priority: FollowupPriority;
+  productId: string | null;
+  enrollmentId: string | null;
+  sequenceStep: number | null;
+  processingState: ProcessingState;
+  processingAttempts: number;
+  lastProcessedAt: Date | null;
+  lastErrorCode: string | null;
+  blockedReason: string | null;
+  quietHoursAdjusted: boolean;
+  customerRepliedAt: Date | null;
+  replyAcknowledgedAt: Date | null;
 }
 
 export interface FollowupRow {
@@ -353,6 +402,19 @@ export interface FollowupRow {
   cancelled_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  purpose: FollowupPurpose | null;
+  priority: FollowupPriority;
+  product_id: string | null;
+  enrollment_id: string | null;
+  sequence_step: number | null;
+  processing_state: ProcessingState;
+  processing_attempts: number;
+  last_processed_at: Date | null;
+  last_error_code: string | null;
+  blocked_reason: string | null;
+  quiet_hours_adjusted: boolean;
+  customer_replied_at: Date | null;
+  reply_acknowledged_at: Date | null;
 }
 
 export function mapFollowupRow(r: FollowupRow): Followup {
@@ -375,6 +437,19 @@ export function mapFollowupRow(r: FollowupRow): Followup {
     cancelledAt: r.cancelled_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    purpose: r.purpose,
+    priority: r.priority,
+    productId: r.product_id,
+    enrollmentId: r.enrollment_id,
+    sequenceStep: r.sequence_step,
+    processingState: r.processing_state,
+    processingAttempts: r.processing_attempts,
+    lastProcessedAt: r.last_processed_at,
+    lastErrorCode: r.last_error_code,
+    blockedReason: r.blocked_reason,
+    quietHoursAdjusted: r.quiet_hours_adjusted,
+    customerRepliedAt: r.customer_replied_at,
+    replyAcknowledgedAt: r.reply_acknowledged_at,
   };
 }
 

@@ -10,6 +10,10 @@ import { createConversationService } from "../crm/conversationService.js";
 import { createFollowupService } from "../crm/followupService.js";
 import { createHandoffService } from "../crm/handoffService.js";
 import { createLeadService } from "../crm/leadService.js";
+import { createFollowupEngine, type FollowupDraft } from "../followupEngine/engineService.js";
+import type { FollowupDrafter } from "../followupEngine/drafting.js";
+import { updateFollowupSettings } from "../followupEngine/settings.js";
+import { createFollowupWorker } from "../followupEngine/worker.js";
 import { requireStaffActor } from "../staffRules.js";
 import { can, customerScopeSql, requireCapability, scopeStaffId, type Viewer } from "./access.js";
 
@@ -38,8 +42,25 @@ export const scheduleFollowupFormSchema = z
 
 const noteSchema = z.string().trim().min(1, "Note is required").max(1000);
 
-export function createDashboardActions(db: Db, options: { clock?: Clock } = {}) {
+export function createDashboardActions(db: Db, options: { clock?: Clock; drafter?: FollowupDrafter } = {}) {
   const clock = options.clock ?? systemClock;
+  const engineFor = (handle: Db) => createFollowupEngine(handle, { clock, drafter: options.drafter });
+  const staffCtx = (viewer: Viewer): ActionContext => ({ actor: { type: "staff", staffId: viewer.id }, requestId: randomUUID() });
+
+  async function visibleCustomer(handle: Db, viewer: Viewer, customerId: unknown): Promise<string> {
+    const id = parseInput(uuidSchema, customerId, "customer id");
+    const row = await queryOne<{ id: string }>(handle, `select id from customers c where c.id = $1 and ${customerScopeSql("c.id", "$2")}`, [id, scopeStaffId(viewer)]);
+    if (!row) throw new CustomerNotFoundError({ id });
+    return id;
+  }
+
+  async function visibleDraftFollowup(handle: Db, viewer: Viewer, draftId: unknown): Promise<string> {
+    const id = parseInput(uuidSchema, draftId, "draft id");
+    const row = await queryOne<{ followup_id: string }>(handle, `select followup_id from followup_drafts where id = $1`, [id]);
+    if (!row) throw new FollowupNotFoundError({ draftId: id });
+    await visibleFollowup(handle, viewer, row.followup_id);
+    return id;
+  }
 
   /** Runs `fn` in one transaction with services bound to it, as the viewer. */
   async function asStaff<T>(viewer: Viewer, action: string, fn: (tx: Db, ctx: ActionContext) => Promise<T>): Promise<T> {
@@ -83,7 +104,102 @@ export function createDashboardActions(db: Db, options: { clock?: Clock } = {}) 
     return row;
   }
 
+  /** Non-managers may only assign follow-up work to themselves. */
+  function assignee(viewer: Viewer, requested: unknown): string {
+    const id = requested === undefined || requested === null || requested === "" ? viewer.id : parseInput(uuidSchema, requested, "staff id");
+    if (id !== viewer.id) requireCapability(viewer, can.assignOthers(viewer), "assign follow-ups to colleagues");
+    return id;
+  }
+
+  const followupEngineActions = {
+    /** Schedule an engine follow-up (purpose, priority, quiet hours, idempotent by key). */
+    scheduleSmartFollowup: (viewer: Viewer, input: Record<string, unknown>) =>
+      asStaff(viewer, "schedule follow-ups", async (tx, ctx) => {
+        await visibleCustomer(tx, viewer, input.customerId);
+        return engineFor(tx).scheduleFollowup({ ...input, assignedStaffId: assignee(viewer, input.assignedStaffId) } as never, ctx);
+      }),
+
+    /** Opt-in Day 1 / 3 / 7 sequence for one customer. */
+    enrollSequence: (viewer: Viewer, input: Record<string, unknown>) =>
+      asStaff(viewer, "start follow-up sequences", async (_tx, ctx) => {
+        await visibleCustomer(db, viewer, input.customerId);
+        return engineFor(db).enrollSequence({ ...input, assignedStaffId: assignee(viewer, input.assignedStaffId) } as never, ctx);
+      }),
+
+    /**
+     * Ask for a draft now. The model call runs outside any database
+     * transaction; `requestKey` (one per form) makes double-submits harmless.
+     */
+    generateDraft: async (viewer: Viewer, followupId: unknown, requestKey: unknown): Promise<FollowupDraft> => {
+      const ctx = staffCtx(viewer);
+      await requireStaffActor(db, ctx, "generate follow-up drafts");
+      const id = parseInput(uuidSchema, followupId, "follow-up id");
+      await visibleFollowup(db, viewer, id);
+      const key = parseInput(z.string().trim().min(8).max(100), requestKey, "request key");
+      return engineFor(db).generateDraft(id, ctx, { sourceEventKey: `request:${key}` });
+    },
+
+    editDraft: async (viewer: Viewer, input: { followupId: unknown; content: unknown; language: unknown; requestKey: unknown }) => {
+      const ctx = staffCtx(viewer);
+      await visibleFollowup(db, viewer, parseInput(uuidSchema, input.followupId, "follow-up id"));
+      return engineFor(db).editDraft({ followupId: input.followupId, content: input.content, language: input.language, eventKey: input.requestKey }, ctx);
+    },
+
+    approveDraft: async (viewer: Viewer, draftId: unknown, note?: unknown) => {
+      const id = await visibleDraftFollowup(db, viewer, draftId);
+      return engineFor(db).approveDraft(id, staffCtx(viewer), note);
+    },
+
+    rejectDraft: async (viewer: Viewer, draftId: unknown, note?: unknown) => {
+      const id = await visibleDraftFollowup(db, viewer, draftId);
+      return engineFor(db).rejectDraft(id, staffCtx(viewer), note);
+    },
+
+    rescheduleFollowup: async (viewer: Viewer, followupId: unknown, when: unknown) => {
+      const id = parseInput(uuidSchema, followupId, "follow-up id");
+      await visibleFollowup(db, viewer, id);
+      return engineFor(db).reschedule(id, when, staffCtx(viewer));
+    },
+
+    cancelSmartFollowup: async (viewer: Viewer, followupId: unknown, reason?: unknown) => {
+      const id = parseInput(uuidSchema, followupId, "follow-up id");
+      await visibleFollowup(db, viewer, id);
+      return engineFor(db).cancel(id, reason, staffCtx(viewer));
+    },
+
+    completeSmartFollowup: async (viewer: Viewer, followupId: unknown, outcome?: unknown) => {
+      const id = parseInput(uuidSchema, followupId, "follow-up id");
+      await visibleFollowup(db, viewer, id);
+      return engineFor(db).complete(id, outcome, staffCtx(viewer));
+    },
+
+    requestHumanTakeover: async (viewer: Viewer, customerId: unknown, note?: unknown) => {
+      const id = await visibleCustomer(db, viewer, customerId);
+      return engineFor(db).requestHumanTakeover(id, note, staffCtx(viewer));
+    },
+
+    setContactConsent: async (viewer: Viewer, customerId: unknown, consent: unknown, source: unknown) => {
+      const id = await visibleCustomer(db, viewer, customerId);
+      return engineFor(db).setContactConsent(id, consent, source, staffCtx(viewer));
+    },
+
+    setIdentityReview: async (viewer: Viewer, customerId: unknown, required: unknown) => {
+      const id = await visibleCustomer(db, viewer, customerId);
+      return engineFor(db).setIdentityReview(id, required, staffCtx(viewer));
+    },
+
+    /** Managers can run the processing worker on demand (it never sends anything). */
+    runFollowupWorker: async (viewer: Viewer) => {
+      requireCapability(viewer, can.assignOthers(viewer), "run follow-up processing");
+      await requireStaffActor(db, staffCtx(viewer), "run follow-up processing");
+      return createFollowupWorker(db, { clock, drafter: options.drafter, workerId: `dashboard-${viewer.id.slice(0, 8)}` }).runOnce();
+    },
+
+    updateFollowupSettings: (viewer: Viewer, input: unknown) => updateFollowupSettings(db, input, staffCtx(viewer)),
+  };
+
   return {
+    ...followupEngineActions,
     /** Managers assign any active colleague; others cannot reassign leads. */
     assignLead: (viewer: Viewer, leadId: unknown, staffId: unknown) =>
       asStaff(viewer, "assign leads", async (tx, ctx) => {
