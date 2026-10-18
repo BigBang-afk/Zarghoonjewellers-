@@ -296,8 +296,32 @@ export function createLeadService(db: Db) {
     return rows.map(mapLeadRow);
   }
 
+  /**
+   * Staff add a dated, attributed note to a lead. Notes are appended under a
+   * row lock (never overwritten); the 5000-character limit is enforced, not
+   * silently truncated.
+   */
+  async function appendLeadNote(leadId: string, note: string, ctx: ActionContext): Promise<Lead> {
+    const id = parseInput(uuidSchema, leadId, "lead id");
+    const text = parseInput(z.string().trim().min(1, "Note is required").max(1000), note, "note");
+    return db.transaction(async (tx) => {
+      const staff = await requireStaffActor(tx, ctx, "add lead notes");
+      const current = await loadLead(tx, id, true);
+      const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+      const entry = `[${stamp} UTC · ${staff.fullName}] ${text}`;
+      const notes = current.notes ? `${current.notes}\n${entry}` : entry;
+      if (notes.length > 5000) throw new InvalidStateError("Lead notes are full (5000 characters)", { leadId: id });
+      const lead = mapLeadRow(
+        (await queryOne<LeadRow>(tx, `update leads set notes = $2, last_activity_at = now() where id = $1 returning *`, [id, notes]))!,
+      );
+      await recordAction(tx, ctx, { actionType: "lead_note_added", customerId: lead.customerId, leadId: id, input: { note: text } });
+      return lead;
+    });
+  }
+
   return {
     createLead,
+    appendLeadNote,
     getLeadById,
     getCustomerLeads,
     getActiveLead,

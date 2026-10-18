@@ -31,6 +31,8 @@ const ALL_TABLES = [
   "customers",
   "product_images",
   "products",
+  "staff_sessions",
+  "staff_credentials",
   "staff",
 ];
 

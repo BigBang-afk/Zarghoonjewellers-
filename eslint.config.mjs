@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Zarghoon AI core is a separate package with its own toolchain.
     "core/**",
+    // The management dashboard is a separate Next.js app with its own toolchain.
+    "admin/**",
   ]),
 ]);
 

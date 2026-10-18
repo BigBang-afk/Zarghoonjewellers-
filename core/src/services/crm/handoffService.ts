@@ -227,7 +227,29 @@ export function createHandoffService(db: Db) {
     return rows.map(mapHandoffRow);
   }
 
-  return { requestHumanHandoff, resolveHandoff, getOpenHandoffs };
+  /** Staff take responsibility for an open handoff (assigns it; does not change takeover). */
+  async function assignHandoff(handoffId: string, staffId: string, ctx: ActionContext): Promise<Handoff> {
+    const id = parseInput(uuidSchema, handoffId, "handoff id");
+    const sid = parseInput(uuidSchema, staffId, "staff id");
+    return db.transaction(async (tx) => {
+      await requireStaffActor(tx, ctx, "assign handoffs");
+      const current = await queryOne<HandoffRow>(tx, `select * from handoffs where id = $1 for update`, [id]);
+      if (!current) throw new HandoffNotFoundError({ id });
+      if (current.status !== "open") throw new InvalidStateError("Handoff is already resolved", { handoffId: id });
+      await assertAssignableStaff(tx, sid, ctx);
+      const row = await queryOne<HandoffRow>(tx, `update handoffs set assigned_staff_id = $2 where id = $1 returning *`, [id, sid]);
+      await recordAction(tx, ctx, {
+        actionType: "handoff_assigned",
+        customerId: current.customer_id,
+        leadId: current.lead_id,
+        conversationId: current.conversation_id,
+        input: { handoffId: id, staffId: sid },
+      });
+      return mapHandoffRow(row!);
+    });
+  }
+
+  return { requestHumanHandoff, resolveHandoff, assignHandoff, getOpenHandoffs };
 }
 
 export type HandoffService = ReturnType<typeof createHandoffService>;

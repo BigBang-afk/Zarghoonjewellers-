@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+:root {
+  --ivory: #faf8f3;
+  --surface: #ffffff;
+  --line: #e7e1d3;
+  --line-strong: #d6cdb8;
+  --ink: #1d1a16;
+  --muted: #6b655b;
+  --emerald-950: #05261f;
+  --emerald-900: #0a3a2e;
+  --emerald-800: #0f4c3b;
+  --emerald-700: #14614b;
+  --emerald-100: #d8ebe3;
+  --emerald-50: #eef6f2;
+  --gold: #b48a2c;
+  --gold-dark: #8a6a20;
+  --gold-light: #ead9a6;
+  --gold-50: #fbf6e9;
+  --danger: #a3262f;
+  --danger-50: #fbecec;
+  --warning: #9a5b0a;
+  --warning-50: #fdf3e2;
+}
+
+@theme inline {
+  --color-ivory: var(--ivory);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-emerald-950: var(--emerald-950);
+  --color-emerald-900: var(--emerald-900);
+  --color-emerald-800: var(--emerald-800);
+  --color-emerald-700: var(--emerald-700);
+  --color-emerald-100: var(--emerald-100);
+  --color-emerald-50: var(--emerald-50);
+  --color-gold: var(--gold);
+  --color-gold-dark: var(--gold-dark);
+  --color-gold-light: var(--gold-light);
+  --color-gold-50: var(--gold-50);
+  --color-danger: var(--danger);
+  --color-danger-50: var(--danger-50);
+  --color-warning: var(--warning);
+  --color-warning-50: var(--warning-50);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--ivory);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+/* Urdu text renders right-to-left in message threads. */
+[lang="ur"] {
+  font-family: "Noto Nastaliq Urdu", "Jameel Noori Nastaleeq", var(--font-serif);
+  line-height: 2;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}

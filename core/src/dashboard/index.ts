@@ -1,0 +1,14 @@
+export * from "./config.js";
+export * from "./runtime.js";
+export * from "../services/dashboard/access.js";
+export * from "../services/dashboard/dashboardService.js";
+export * from "../services/dashboard/dashboardActions.js";
+export * from "../services/staffAuth/staffAuthService.js";
+export type { StaffRole, StaffSummary } from "../services/staffRules.js";
+export { STAFF_ROLES } from "../services/staffRules.js";
+export { LEAD_SIGNAL_POINTS, type LeadClassification, type LeadScoreBreakdownItem } from "../services/crm/leadScoring.js";
+export { LEAD_STATUSES, FOLLOWUP_TYPES, CHANNELS, type LeadStatus } from "../schemas/crm.js";
+export { STOCK_STATUSES } from "../schemas/product.js";
+export { DEMO_STAFF } from "../demo/dashboardDemo.js";
+export { toPublicError, AppError } from "../lib/errors.js";
+export { SlidingWindowRateLimiter, type RateRule } from "../channels/website/rateLimiter.js";
