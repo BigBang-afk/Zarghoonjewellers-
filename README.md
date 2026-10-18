@@ -86,3 +86,15 @@ npm run dev          # builds core, starts the site with the demo chat
 npm run test:e2e     # Playwright end-to-end tests (desktop + mobile)
 ```
 
+### Adding the chat to an existing website
+
+The chat can be added to **any existing website** (Shopify, WordPress, Wix,
+custom…) with one line, without changing that site:
+
+```html
+<script src="https://YOUR-ZARGHOON-AI-HOST/zarghoon-ai.js" defer></script>
+```
+
+Deploy this app in service-only mode (`ZARGHOON_AI_SERVICE_ONLY=true`) as the
+chat host. See [`core/docs/website-embed.md`](core/docs/website-embed.md).
+

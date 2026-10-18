@@ -2,6 +2,7 @@ import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE_NAME, WebsiteChatError, type ChatVisitor } from "@zarghoon/core/website";
 import { auth } from "@/lib/auth";
+import { embedIsCrossSite } from "@/lib/zarghoon/embedConfig";
 
 /** Request hardening shared by the /api/chat routes. */
 
@@ -82,10 +83,15 @@ export async function visitorFrom(req: NextRequest): Promise<ChatVisitor> {
 
 export function withSessionCookie(res: NextResponse, token: string | null, secure: boolean) {
   if (token) {
+    // Embedded from a different site than the chat service: browsers only keep
+    // cookies in third-party iframes when they are Partitioned (CHIPS), which
+    // also keeps this session scoped to that one embedding site.
+    const crossSite = embedIsCrossSite(process.env);
     res.cookies.set(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
-      sameSite: "lax",
-      secure,
+      sameSite: crossSite ? "none" : "lax",
+      secure: crossSite || secure,
+      partitioned: crossSite || undefined,
       path: "/api/chat",
       maxAge: COOKIE_MAX_AGE_SECONDS,
     });

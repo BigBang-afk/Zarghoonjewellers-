@@ -1,0 +1,33 @@
+<!doctype html>
+<!--
+  TEST FIXTURE ONLY — stands in for an existing store website (any platform)
+  to prove the one-line Zarghoon AI embed works without changing the site.
+  Its aggressive global CSS checks that the widget is fully isolated.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Existing Store — cross-site (test fixture)</title>
+    <style>
+      body { font-family: Georgia, serif; margin: 0; background: #fff; color: #222; }
+      header { padding: 16px 24px; background: #003366; color: #fff; }
+      main { padding: 24px; }
+      button { background: rgb(255, 0, 0) !important; color: #fff !important; border-radius: 0 !important; font-size: 18px !important; }
+      iframe { border: 10px solid lime !important; }
+      .product { border: 1px solid #ccc; padding: 16px; max-width: 320px; }
+    </style>
+  </head>
+  <body>
+    <header><h1>Existing Store</h1></header>
+    <main>
+      <div class="product">
+        <h2 id="product-name">Store Product</h2>
+        <p id="product-price">Rs. 123,456</p>
+        <button id="add-to-cart" type="button" onclick="this.textContent='Added to cart'">Add to cart</button>
+      </div>
+    </main>
+    <!-- The ONLY change an existing website needs: -->
+    <script src="http://localhost:3001/zarghoon-ai.js" defer></script>
+  </body>
+</html>

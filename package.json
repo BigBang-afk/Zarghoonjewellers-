@@ -12,7 +12,8 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "build:core": "tsc -p core/tsconfig.build.json",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:cross-site": "E2E_CROSS_SITE=1 playwright test e2e/embed-cross-site.spec.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -30,9 +30,12 @@ function GemPlaceholder() {
 export default function ChatProductCards({
   products,
   onAsk,
+  linkTarget = "_blank",
 }: {
   products: ChatProductCard[];
   onAsk: (sku: string) => void;
+  /** "_top" when embedded: opens the store's own product page in the main window. */
+  linkTarget?: "_blank" | "_top";
 }) {
   if (products.length === 0) return null;
   return (
@@ -72,7 +75,7 @@ export default function ChatProductCards({
               {p.viewUrl ? (
                 <a
                   href={p.viewUrl}
-                  target="_blank"
+                  target={linkTarget}
                   rel="noopener noreferrer"
                   className="block rounded-full border border-gold/50 py-1.5 text-center text-xs font-medium text-gold-dark transition hover:bg-gold/10"
                 >

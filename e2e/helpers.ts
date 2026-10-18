@@ -9,7 +9,10 @@ export async function openChat(page: Page) {
 
 export async function sendChat(page: Page, text: string) {
   const before = await page.getByTestId("msg-customer").count();
-  await page.getByTestId("chat-input").fill(text);
+  await expect(async () => {
+    await page.getByTestId("chat-input").fill(text);
+    await expect(page.getByTestId("chat-send")).toBeEnabled({ timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
   await page.getByTestId("chat-send").click();
   await expect(page.getByTestId("msg-customer")).toHaveCount(before + 1);
   await expect(page.getByTestId("typing-indicator")).toHaveCount(0, { timeout: 45_000 });

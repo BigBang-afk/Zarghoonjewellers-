@@ -51,7 +51,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: "gem" | "close" | "send" 
   );
 }
 
-function Bubble({ m, onAsk }: { m: ChatMessageView; onAsk: (sku: string) => void }) {
+function Bubble({ m, onAsk, linkTarget }: { m: ChatMessageView; onAsk: (sku: string) => void; linkTarget: "_blank" | "_top" }) {
   const urdu = ARABIC_SCRIPT.test(m.text);
   const textClass = `whitespace-pre-line break-words ${urdu ? "font-urdu text-[15px] leading-loose" : "text-sm leading-relaxed"}`;
 
@@ -85,7 +85,7 @@ function Bubble({ m, onAsk }: { m: ChatMessageView; onAsk: (sku: string) => void
         {m.text}
       </div>
       <div className="w-full">
-        <ChatProductCards products={m.products} onAsk={onAsk} />
+        <ChatProductCards products={m.products} onAsk={onAsk} linkTarget={linkTarget} />
       </div>
     </div>
   );
@@ -130,9 +130,18 @@ function ContactForm({ onDone }: { onDone: (message: string) => void }) {
   );
 }
 
-export default function ChatWidget({ mode, model }: { mode: Mode; model: Model }) {
+/** Message the embedding page (public/zarghoon-ai.js) — UI events only, never data. */
+function notifyParent(type: "zarghoon-ai:close") {
+  if (window.parent !== window) window.parent.postMessage({ type }, "*");
+}
+
+/**
+ * @param embedded rendered inside an iframe on an existing website (/embed/chat):
+ *   always open, no launcher, closing is handled by the host page's loader.
+ */
+export default function ChatWidget({ mode, model, embedded = false }: { mode: Mode; model: Model; embedded?: boolean }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
   const [loaded, setLoaded] = useState(false);
   const [available, setAvailable] = useState(true);
   const [messages, setMessages] = useState<ChatMessageView[]>([]);
@@ -158,6 +167,27 @@ export default function ChatWidget({ mode, model }: { mode: Mode; model: Model }
     }
   }, []);
 
+  // Embedded: the chat is open from the start, so load history once on mount.
+  useEffect(() => {
+    if (!embedded) return;
+    let cancelled = false;
+    api<ChatStateView>("/api/chat").then(
+      (state) => {
+        if (cancelled) return;
+        setAvailable(state.available);
+        setMessages(state.messages);
+        setTakeover(state.humanTakeoverActive);
+        setLoaded(true);
+      },
+      (err: Error) => !cancelled && setError({ text: err.message }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [embedded]);
+
+  const close = useCallback(() => (embedded ? notifyParent("zarghoon-ai:close") : setOpen(false)), [embedded]);
+
   function openChat() {
     setOpen(true);
     if (!loaded) void load();
@@ -173,10 +203,10 @@ export default function ChatWidget({ mode, model }: { mode: Mode; model: Model }
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, close]);
 
   async function send(text: string) {
     const message = text.trim();
@@ -218,7 +248,8 @@ export default function ChatWidget({ mode, model }: { mode: Mode; model: Model }
     }
   }
 
-  if (mode === "off" || pathname?.startsWith("/admin")) return null;
+  if (mode === "off" || pathname?.startsWith("/admin") || (!embedded && pathname?.startsWith("/embed"))) return null;
+  const linkTarget = embedded ? "_top" : "_blank";
 
   const customerSpoke = messages.some((m) => m.role === "customer");
   const welcome: ChatMessageView = { id: "welcome", role: "assistant", text: WELCOME, language: "english", createdAt: "", products: [] };
@@ -246,7 +277,11 @@ export default function ChatWidget({ mode, model }: { mode: Mode; model: Model }
           role="dialog"
           aria-label="Zarghoon AI chat"
           data-testid="chat-panel"
-          className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-cream shadow-2xl sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[400px] sm:rounded-3xl sm:border sm:border-gold/25"
+          className={
+            embedded
+              ? "fixed inset-0 z-[60] flex flex-col overflow-hidden bg-cream"
+              : "fixed inset-0 z-[60] flex flex-col overflow-hidden bg-cream shadow-2xl sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(680px,calc(100dvh-3rem))] sm:w-[400px] sm:rounded-3xl sm:border sm:border-gold/25"
+          }
         >
           <header className="relative bg-charcoal px-5 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-cream">
             <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent" />
@@ -271,7 +306,7 @@ export default function ChatWidget({ mode, model }: { mode: Mode; model: Model }
                 <button type="button" onClick={() => void reset("conversation")} aria-label="Start a new conversation" title="New conversation" className="rounded-full p-2 text-cream/70 transition hover:bg-white/10 hover:text-gold">
                   <Icon name="reset" className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => setOpen(false)} aria-label="Close chat" className="rounded-full p-2 text-cream/70 transition hover:bg-white/10 hover:text-gold">
+                <button type="button" onClick={close} aria-label="Close chat" className="rounded-full p-2 text-cream/70 transition hover:bg-white/10 hover:text-gold">
                   <Icon name="close" className="h-5 w-5" />
                 </button>
               </div>
@@ -291,9 +326,9 @@ export default function ChatWidget({ mode, model }: { mode: Mode; model: Model }
           )}
 
           <div ref={listRef} className="flex-1 space-y-4 overflow-y-auto px-4 py-5" aria-live="polite" data-testid="chat-messages">
-            <Bubble m={welcome} onAsk={(sku) => void send(`Tell me more about ${sku}`)} />
+            <Bubble m={welcome} onAsk={(sku) => void send(`Tell me more about ${sku}`)} linkTarget={linkTarget} />
             {messages.map((m) => (
-              <Bubble key={m.id} m={m} onAsk={(sku) => void send(`Tell me more about ${sku}`)} />
+              <Bubble key={m.id} m={m} onAsk={(sku) => void send(`Tell me more about ${sku}`)} linkTarget={linkTarget} />
             ))}
             {!customerSpoke && !sending && available && (
               <div className="flex flex-wrap gap-2 pt-1" data-testid="chat-suggestions">

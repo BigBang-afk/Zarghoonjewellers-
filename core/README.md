@@ -25,6 +25,7 @@ Facebook, TikTok, Google Business and ads are **not connected**, by design.
 | Approvals & audit | approval workflow for sensitive actions; append-only, redacted audit log |
 | Sales Agent | Claude tool-use agent over the services above, with code-enforced fact grounding and handoffs ([docs/sales-agent.md](docs/sales-agent.md)) |
 | Website chat | Session-isolated website channel over the Sales Agent: rate limits, product cards, contact capture ([docs/website-chat.md](docs/website-chat.md)) |
+| Website embed | One-line `<script>` that adds the chat to any existing website ([docs/website-embed.md](docs/website-embed.md)) |
 
 Read **[docs/crm.md](docs/crm.md)** for the CRM rules and
 **[docs/sales-agent.md](docs/sales-agent.md)** for the Sales Agent.

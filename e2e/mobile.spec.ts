@@ -20,3 +20,20 @@ test("on a phone the chat opens full-screen and stays usable", async ({ page }) 
   await page.getByRole("button", { name: "Close chat" }).click();
   await expect(launcher).toBeVisible();
 });
+
+test("on a phone the embedded chat on an existing site opens full-screen", async ({ page }) => {
+  await page.goto("http://localhost:4000/");
+  await expect(page.locator("#product-name")).toBeVisible();
+  await page.getByTestId("zarghoon-ai-launcher").click();
+  const frame = page.getByTestId("zarghoon-ai-frame");
+  await expect(frame).toBeVisible();
+  const box = (await frame.boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(Math.round(box.width)).toBe(viewport.width);
+  expect(Math.round(box.height)).toBe(viewport.height);
+  const chat = page.frameLocator('[data-testid="zarghoon-ai-frame"] iframe');
+  await expect(chat.getByTestId("chat-panel")).toBeVisible();
+  await chat.getByRole("button", { name: "Close chat" }).click();
+  await expect(frame).toBeHidden();
+  await expect(page.locator("#add-to-cart")).toBeVisible();
+});

@@ -6,6 +6,7 @@ import Providers from "@/components/Providers";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import ChatWidget from "@/components/chat/ChatWidget";
+import SiteChrome from "@/components/SiteChrome";
 import "./globals.css";
 
 const inter = Inter({
@@ -43,9 +44,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="flex min-h-full flex-col bg-cream text-charcoal">
         <Providers>
-          <Navbar />
+          <SiteChrome position="header">
+            <Navbar />
+          </SiteChrome>
           <main className="flex-1">{children}</main>
-          <Footer />
+          <SiteChrome position="footer">
+            <Footer />
+          </SiteChrome>
           <ChatWidget mode={chat.mode} model={chat.model} />
         </Providers>
       </body>
