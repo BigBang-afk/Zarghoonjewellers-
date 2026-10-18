@@ -11,6 +11,8 @@ import pg from "pg";
  */
 export interface Db {
   query<T = Record<string, unknown>>(sql: string, params?: readonly unknown[]): Promise<T[]>;
+  /** Runs a trusted multi-statement SQL script (migrations only; never user input). */
+  exec(sql: string): Promise<void>;
   transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T>;
 }
 
@@ -31,17 +33,33 @@ class PgTransactionDb implements Db {
     return result.rows as T[];
   }
 
+  async exec(sql: string): Promise<void> {
+    await this.client.query(sql); // no parameters → simple protocol, multiple statements allowed
+  }
+
   transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
     return fn(this);
   }
 }
 
 export class PgDb implements Db {
-  constructor(private readonly pool: pg.Pool) {}
+  constructor(private readonly pool: pg.Pool) {
+    // Idle connections can be terminated by the server (restart, failover,
+    // maintenance). node-postgres reports that as a pool "error" event, which
+    // would crash the process if unhandled. The pool replaces the client on
+    // the next query, so log (without connection details) and carry on.
+    pool.on("error", (error: Error & { code?: string }) => {
+      process.stderr.write(`${JSON.stringify({ level: "warn", message: "postgres idle client error", code: error.code ?? null })}\n`);
+    });
+  }
 
   async query<T>(sql: string, params: readonly unknown[] = []): Promise<T[]> {
     const result = await this.pool.query(sql, params as unknown[]);
     return result.rows as T[];
+  }
+
+  async exec(sql: string): Promise<void> {
+    await this.pool.query(sql);
   }
 
   async transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
@@ -68,7 +86,17 @@ export class PgDb implements Db {
 export function createPgDb(connectionString: string): PgDb {
   // NUMERIC (oid 1700) is returned as a string by node-postgres by default,
   // which is exactly what we want: money must never pass through a JS float.
-  return new PgDb(new pg.Pool({ connectionString, max: 10 }));
+  return new PgDb(
+    new pg.Pool({
+      connectionString,
+      max: 10,
+      connectionTimeoutMillis: 10_000,
+      idleTimeoutMillis: 30_000,
+      // A runaway query must not hold a connection (or a customer's request) forever.
+      statement_timeout: 30_000,
+      application_name: "zarghoon-ai-core",
+    }),
+  );
 }
 
 // --- Postgres error helpers --------------------------------------------------

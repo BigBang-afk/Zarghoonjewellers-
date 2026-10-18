@@ -85,14 +85,17 @@ CI (`.github/workflows/core-ci.yml`) runs both.
 
 ### Database (Supabase)
 
+Use the safe migrator, not `supabase db push`; see
+[docs/database-and-sync.md](docs/database-and-sync.md):
+
 ```bash
-supabase link --project-ref <ref>
-supabase db push          # applies supabase/migrations in order
+npm run db:migrate -- --env staging            # dry run
+npm run db:migrate -- --env staging --init     # once, on an empty database
+npm run db:migrate -- --env staging --apply
 ```
 
-On plain Postgres (e.g. Neon), apply the files in `supabase/migrations/` in
-filename order. The RLS migration skips Supabase-only roles if they are
-absent.
+Products from the existing website are copied in with `npm run products:sync`
+(preview → owner approval → apply). See the same document.
 
 ### Environment
 

@@ -48,7 +48,11 @@ export async function createWebsiteChatRuntime(
     close = () => memory.close();
     businessInfo = DEMO_BUSINESS_INFO;
   } else {
-    const pg = createPgDb(config.databaseUrl!);
+    if (!config.databaseUrl) {
+      // Live/staging without a database: nothing to connect to; the chat reports itself unavailable.
+      return { config, chat: createWebsiteChat({ core: null as never, agent: null, config: { ...config, mode: "off" } }), core: null, close: async () => {} };
+    }
+    const pg = createPgDb(config.databaseUrl);
     db = pg;
     close = () => pg.end();
     businessInfo = loadBusinessInfo(env);

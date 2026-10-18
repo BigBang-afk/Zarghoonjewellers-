@@ -28,7 +28,8 @@ jobs:
       - run: npm test
 
   postgres:
-    # Applies the migrations to a real Postgres and runs the node-postgres adapter test.
+    # Real PostgreSQL 16: the node-postgres adapter test, then the whole suite
+    # (each test file in its own temporary database, migrated by the safe migrator).
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -54,3 +55,7 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "create role anon nologin; create role authenticated nologin;"
           for f in supabase/migrations/*.sql; do psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f "$f"; done
       - run: npx vitest run tests/integration/pgAdapter.test.ts
+      - name: Full suite on PostgreSQL
+        run: npm test
+        env:
+          ZARGHOON_TEST_PG_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres

@@ -1,0 +1,37 @@
+[
+  {
+    "sourceProductId": "export-nk-001",
+    "sku": "STG-NK-001",
+    "name": "STAGING SAMPLE Bridal Kundan Necklace",
+    "description": "Staging sample only. Not a real product.",
+    "price": "495000",
+    "currency": "PKR",
+    "stockQuantity": 1,
+    "stockStatus": "low_stock"
+  },
+  {
+    "sourceProductId": "export-bg-001",
+    "sku": "STG-BG-001",
+    "name": "STAGING SAMPLE Classic 22K Bangles",
+    "price": "372000"
+  },
+  {
+    "sourceProductId": "export-rg-001",
+    "sku": "STG-RG-001",
+    "name": "STAGING SAMPLE Solitaire Ring",
+    "karat": 22,
+    "stockStatus": "made_to_order"
+  },
+  {
+    "sourceProductId": "export-er-001",
+    "sku": "STG-ER-001",
+    "name": "STAGING SAMPLE Gold Jhumka Earrings",
+    "category": "Earrings",
+    "metal": "gold",
+    "karat": 22,
+    "weightGrams": "11",
+    "price": "98000",
+    "stockQuantity": 3,
+    "stockStatus": "available"
+  }
+]

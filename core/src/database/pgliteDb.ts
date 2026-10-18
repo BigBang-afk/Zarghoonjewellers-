@@ -21,12 +21,15 @@ export function loadMigrations(): { name: string; sql: string }[] {
     .map((name) => ({ name, sql: readFileSync(join(MIGRATIONS_DIR, name), "utf8") }));
 }
 
-type PgliteQueryable = Pick<PGlite | Transaction, "query">;
+type PgliteQueryable = Pick<PGlite | Transaction, "query" | "exec">;
 
 class PgliteTxDb implements Db {
   constructor(private readonly q: PgliteQueryable) {}
   async query<T>(sql: string, params: readonly unknown[] = []): Promise<T[]> {
     return (await this.q.query<T>(sql, params as unknown[])).rows;
+  }
+  async exec(sql: string): Promise<void> {
+    await this.q.exec(sql);
   }
   transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
     return fn(this);
@@ -37,6 +40,9 @@ export class PgliteDb implements Db {
   constructor(readonly pg: PGlite) {}
   async query<T>(sql: string, params: readonly unknown[] = []): Promise<T[]> {
     return (await this.pg.query<T>(sql, params as unknown[])).rows;
+  }
+  async exec(sql: string): Promise<void> {
+    await this.pg.exec(sql);
   }
   transaction<T>(fn: (tx: Db) => Promise<T>): Promise<T> {
     return this.pg.transaction((tx) => fn(new PgliteTxDb(tx)));

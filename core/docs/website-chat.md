@@ -43,6 +43,7 @@ Sales Agent → approved tools → core services → PostgreSQL
 | `ZARGHOON_CHAT_MODE` | Database | Model | Default |
 | --- | --- | --- | --- |
 | `demo` | In-memory PostgreSQL (PGlite) seeded with `DEMO-` fixtures. **Session-only**: lost on server restart | Claude if `ANTHROPIC_API_KEY` is set, otherwise the labelled **offline demo model (not AI)** | development |
+| `staging` | `ZARGHOON_CORE_DATABASE_URL` (a persistent **staging** database with test data; see [database-and-sync.md](database-and-sync.md)) | Claude if `ANTHROPIC_API_KEY` is set, otherwise the offline stand-in; labelled "Staging" | — |
 | `live` | `ZARGHOON_CORE_DATABASE_URL` (the real core database) | Claude; without a key the chat is **unavailable** (503), never faked | — |
 | `off` | none | none — launcher hidden, API refuses | production |
 

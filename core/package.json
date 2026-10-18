@@ -28,7 +28,11 @@
     "products:import": "tsx scripts/import-products.ts",
     "sales": "tsx scripts/sales-playground.ts",
     "sales-agent": "tsx scripts/sales-agent-live.ts",
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "db:migrate": "tsx scripts/db-migrate.ts",
+    "products:sync": "tsx scripts/products-sync.ts",
+    "crm:report": "tsx scripts/crm-report.ts",
+    "approvals": "tsx scripts/approvals.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

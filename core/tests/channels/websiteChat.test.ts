@@ -53,6 +53,18 @@ describe("configuration", () => {
     expect(resolveWebsiteChatConfig({ NODE_ENV: "production", ZARGHOON_CHAT_MODE: "live" }).unavailableReason).toMatch(/DATABASE_URL/);
   });
 
+  it("staging mode uses the persistent database, with or without Claude", () => {
+    expect(resolveWebsiteChatConfig({ NODE_ENV: "development", ZARGHOON_CHAT_MODE: "staging", ZARGHOON_CORE_DATABASE_URL: "postgres://s" })).toMatchObject({
+      mode: "staging",
+      model: "offline_demo",
+      databaseUrl: "postgres://s",
+    });
+    expect(
+      resolveWebsiteChatConfig({ NODE_ENV: "production", ZARGHOON_CHAT_MODE: "staging", ZARGHOON_CORE_DATABASE_URL: "postgres://s", ANTHROPIC_API_KEY: "k" }).model,
+    ).toBe("claude");
+    expect(resolveWebsiteChatConfig({ NODE_ENV: "development", ZARGHOON_CHAT_MODE: "staging" })).toMatchObject({ model: "none" });
+  });
+
   it("never enables debug output in production", () => {
     expect(resolveWebsiteChatConfig({ NODE_ENV: "production", ZARGHOON_CHAT_MODE: "demo", ZARGHOON_CHAT_DEBUG: "true" }).debug).toBe(false);
   });

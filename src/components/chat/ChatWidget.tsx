@@ -293,9 +293,9 @@ export default function ChatWidget({ mode, model, embedded = false }: { mode: Mo
                 <div>
                   <h2 className="font-serif text-xl leading-tight text-gold">
                     Zarghoon AI
-                    {mode === "demo" && (
+                    {(mode === "demo" || mode === "staging") && (
                       <span data-testid="demo-badge" className="ml-2 rounded-full border border-gold/50 px-2 py-0.5 align-middle font-sans text-[9px] font-semibold uppercase tracking-widest text-gold">
-                        Demo
+                        {mode === "demo" ? "Demo" : "Staging"}
                       </span>
                     )}
                   </h2>
@@ -313,15 +313,19 @@ export default function ChatWidget({ mode, model, embedded = false }: { mode: Mo
             </div>
           </header>
 
-          {mode === "demo" && (
+          {(mode === "demo" || mode === "staging") && (
             <div className="flex items-center justify-between gap-2 border-b border-gold/15 bg-gold/10 px-4 py-1.5 text-[11px] text-charcoal/70" data-testid="demo-banner">
               <span>
-                Demo mode — sample DEMO products, not real stock or prices
+                {mode === "demo"
+                  ? "Demo mode — sample DEMO products, not real stock or prices"
+                  : "Staging — test data only, not real customers, stock or prices"}
                 {model === "offline_demo" && " · offline demo model (not AI)"}
               </span>
-              <button type="button" onClick={() => void reset("demo")} className="shrink-0 font-medium text-gold-dark underline-offset-2 hover:underline">
-                Reset demo
-              </button>
+              {mode === "demo" && (
+                <button type="button" onClick={() => void reset("demo")} className="shrink-0 font-medium text-gold-dark underline-offset-2 hover:underline">
+                  Reset demo
+                </button>
+              )}
             </div>
           )}
 

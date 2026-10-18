@@ -8,6 +8,9 @@ import { zodIssues } from "../../lib/validation.js";
  * Modes:
  *  - "demo": in-memory PostgreSQL seeded with DEMO- fixtures. Session-only:
  *    everything is lost when the server restarts. Never touches a real database.
+ *  - "staging": a persistent staging database (ZARGHOON_CORE_DATABASE_URL) with
+ *    test data; Claude if ANTHROPIC_API_KEY is set, otherwise the labelled
+ *    offline demo model. Shown as "Staging" in the chat.
  *  - "live": the real Zarghoon core database (ZARGHOON_CORE_DATABASE_URL) and Claude.
  *  - "off":  the chat is disabled and the launcher is hidden.
  *
@@ -22,7 +25,7 @@ const boolString = z
 
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
-  ZARGHOON_CHAT_MODE: z.enum(["demo", "live", "off"]).optional(),
+  ZARGHOON_CHAT_MODE: z.enum(["demo", "staging", "live", "off"]).optional(),
   ZARGHOON_CORE_DATABASE_URL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ZARGHOON_CHAT_DEBUG: boolString,
@@ -32,7 +35,7 @@ const envSchema = z.object({
   ZARGHOON_CHAT_GLOBAL_PER_DAY: z.coerce.number().int().min(1).max(1_000_000).default(2000),
 });
 
-export type ChatMode = "demo" | "live" | "off";
+export type ChatMode = "demo" | "staging" | "live" | "off";
 export type ChatModelKind = "claude" | "offline_demo" | "none";
 
 export interface WebsiteChatLimits {
@@ -72,6 +75,9 @@ export function resolveWebsiteChatConfig(env: NodeJS.ProcessEnv): WebsiteChatCon
     if (!e.ZARGHOON_CORE_DATABASE_URL) unavailableReason = "ZARGHOON_CORE_DATABASE_URL is not set";
     else if (!hasKey) unavailableReason = "ANTHROPIC_API_KEY is not set";
     else model = "claude";
+  } else if (mode === "staging") {
+    if (!e.ZARGHOON_CORE_DATABASE_URL) unavailableReason = "ZARGHOON_CORE_DATABASE_URL is not set";
+    else model = hasKey ? "claude" : "offline_demo";
   } else {
     // Demo: use Claude when a key is present; otherwise a clearly labelled offline stand-in.
     model = hasKey ? "claude" : "offline_demo";
@@ -81,7 +87,7 @@ export function resolveWebsiteChatConfig(env: NodeJS.ProcessEnv): WebsiteChatCon
     mode,
     model,
     unavailableReason,
-    databaseUrl: mode === "live" ? (e.ZARGHOON_CORE_DATABASE_URL ?? null) : null,
+    databaseUrl: mode === "live" || mode === "staging" ? (e.ZARGHOON_CORE_DATABASE_URL ?? null) : null,
     debug: !production && e.ZARGHOON_CHAT_DEBUG,
     limits: {
       sessionPerMinute: e.ZARGHOON_CHAT_SESSION_PER_MINUTE,

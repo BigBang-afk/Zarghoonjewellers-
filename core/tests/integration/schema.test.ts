@@ -78,12 +78,13 @@ describe("row level security", () => {
     await insertStaff(t.db);
     for (const role of ["anon", "authenticated"]) {
       for (const table of ["customers", "leads", "staff", "orders", "messages", "agent_actions", "approvals", "products"]) {
-        await t.db.pg.exec(`set role ${role}`);
-        try {
-          await expect(t.db.query(`select * from ${table}`)).rejects.toThrow(/permission denied/);
-        } finally {
-          await t.db.pg.exec(`reset role`);
-        }
+        // SET LOCAL inside a transaction: the role change cannot leak to other pooled connections.
+        await expect(
+          t.db.transaction(async (tx) => {
+            await tx.query(`set local role ${role}`);
+            await tx.query(`select * from ${table}`);
+          }),
+        ).rejects.toThrow(/permission denied/);
       }
     }
   });

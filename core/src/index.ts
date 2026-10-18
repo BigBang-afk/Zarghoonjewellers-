@@ -10,6 +10,7 @@ import { createLeadService } from "./services/crm/leadService.js";
 import { createProductInterestService } from "./services/crm/productInterestService.js";
 import { createProductImportService } from "./services/products/import/productImportService.js";
 import { createProductService } from "./services/products/productService.js";
+import { createProductSyncService } from "./services/products/sync/productSyncService.js";
 import { systemClock, type Clock } from "./types/context.js";
 
 /**
@@ -23,6 +24,7 @@ export function createZarghoonCore(options: { db: Db; clock?: Clock }) {
   return {
     products: createProductService(db),
     productImport: createProductImportService(db),
+    productSync: createProductSyncService(db),
     customers: createCustomerService(db),
     leads: createLeadService(db),
     productInterests: createProductInterestService(db),
