@@ -45,6 +45,8 @@ export default defineConfig({
             timeout: 120_000,
             env: {
               ZARGHOON_CHAT_MODE: "demo",
+              // A local production-build preview with fake data only.
+              ZARGHOON_ALLOW_DEMO_IN_PRODUCTION: "true",
               ZARGHOON_EMBED_CROSS_SITE: "true",
               ZARGHOON_EMBED_ALLOWED_ORIGINS: "http://127.0.0.1:4000",
               ZARGHOON_AI_SERVICE_ONLY: "true",

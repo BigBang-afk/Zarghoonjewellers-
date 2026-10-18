@@ -50,5 +50,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt).*)"],
+  // /api/health is the public up/down check (it reveals nothing else).
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|api/health$).*)"],
 };

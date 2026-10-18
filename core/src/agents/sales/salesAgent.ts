@@ -155,8 +155,22 @@ export function createSalesAgent(deps: SalesAgentDeps) {
     const scope: TurnScope = { customerId: customer.id, conversationId: conversation.id, leadId, inboundMessageId: inbound.message.id };
     const state = new TurnState();
     for (const i of customer360.productInterests) state.seenProducts.set(i.productId, { sku: i.productSku, name: i.productName });
-    state.factSources.push(contextText);
-    const customerTexts = [input.message, ...history.filter((m) => m.senderType === "customer").map((m) => m.content)];
+    // Grounding for the reply validator. Only database facts count as verified: the profile
+    // (without the budget, which is the customer's own figure) and what staff wrote. Earlier AI
+    // replies do not — they may be stale — and the customer's words ground only as the customer's.
+    state.factSources.push(
+      buildTurnContext({
+        now: clock(),
+        customer360: { ...customer360, activeLead: customer360.activeLead ? { ...customer360.activeLead, budgetAmount: null } : null },
+        history: history.filter((m) => m.senderType === "staff"),
+        currentMessage: "",
+      }),
+    );
+    const customerTexts = [
+      input.message,
+      ...history.filter((m) => m.senderType === "customer").map((m) => m.content),
+      ...(customer360.activeLead?.budgetAmount ? [`budget ${customer360.activeLead.budgetAmount}`] : []),
+    ];
     const executor = createToolExecutor({ core, scope, state, ctx, businessInfo, logger });
 
     // 6. Controlled model loop.

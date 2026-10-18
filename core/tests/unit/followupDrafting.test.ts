@@ -51,6 +51,7 @@ describe("draft validation (never invent business data)", () => {
     expect(codes("Assalamualaikum! We can deliver within two days to your home in Lahore.")).toContain("delivery_promise");
     expect(codes("Assalamualaikum! Hurry, only 1 left of this bridal necklace for you.")).toContain("urgency_or_scarcity");
     expect(codes("Assalamualaikum! See all designs at https://example.com/bridal today.")).toContain("contact_or_link");
+    expect(codes("Assalamualaikum! Your payment has been received and your order is confirmed.")).toContain("transaction_claim");
     expect(codes("Assalamualaikum! Just following up on the bridal necklace.", facts({ language: "urdu" }))).toContain("wrong_language");
   });
 

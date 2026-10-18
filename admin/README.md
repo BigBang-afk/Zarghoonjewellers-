@@ -88,6 +88,8 @@ or has pending migrations. It never falls back to demo data.
   - sales / support: only customers they are assigned to (lead, conversation, follow-up or handoff) plus the open unassigned handoff queue.
 - **Mutations use the existing CRM services** (follow-up rules, do-not-contact, closed leads, approver roles, "AI cannot release a takeover"), which also write the audit log. Customer 360 and conversation views are audited too.
 - **Headers**: CSP, `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `noindex`, `Cache-Control: no-store`, HSTS in production. No secrets or database code reach the browser.
+- **Health check**: `GET /api/health` is public and returns only `{"status":"ok"}` (200) or `{"status":"unavailable"}` (503).
+- **Demo mode in a production build** is refused unless `ZARGHOON_ALLOW_DEMO_IN_PRODUCTION=true`. Use that only for a local preview, never on a deployment.
 - **Not yet implemented**: sending messages to customers, editing products/prices/stock, staff management in the UI (use the CLI), order management, multi-factor authentication, a shared rate-limit store for multiple instances.
 
 ## Tests

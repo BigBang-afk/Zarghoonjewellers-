@@ -104,6 +104,34 @@ grant usage on schema public to zarghoon_sync_reader;
 grant select on "Product", "ProductImage" to zarghoon_sync_reader;
 ```
 
+### Least-privilege roles for the Zarghoon core database
+
+The apps connect directly to PostgreSQL. Row-level security therefore protects
+only the Supabase public API roles (`anon`/`authenticated`, which have no
+access at all). Authorisation of staff and customers is enforced in the
+application. The database role is limited as well:
+
+```bash
+psql "$OWNER_URL" -v ON_ERROR_STOP=1 -f supabase/roles/least_privilege.sql   # re-run after every migration
+psql "$OWNER_URL" -c '\password zarghoon_app'
+ZARGHOON_CORE_DATABASE_URL='<zarghoon_app url>' npm run db:audit -- --env staging
+```
+
+| Role | Can | Cannot |
+| --- | --- | --- |
+| owner (e.g. `postgres`) | run migrations | — (never used by the apps) |
+| `zarghoon_app` | read and write rows | change the schema; truncate; update or delete the audit log; delete approvals; write migration history; bypass RLS |
+| `zarghoon_readonly` | read for reports | write anything; read staff passwords or sessions |
+
+Database triggers also enforce the following, even for the owner:
+
+- the audit log is append-only
+- an approval decision is final, and the approved request cannot be edited
+- an approval can be used once (`consumed_at`)
+- the AI cannot post during a human takeover
+
+`npm run db:audit` checks each of these and exits 1 on a failure.
+
 ## 4. Website chat on the persistent database
 
 | `ZARGHOON_CHAT_MODE` | Database | Model |

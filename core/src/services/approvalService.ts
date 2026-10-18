@@ -44,6 +44,9 @@ export interface Approval {
   decidedByStaffId: string | null;
   decidedAt: Date | null;
   decisionNote: string | null;
+  /** Set once, when the approved action is carried out; an approval is never used twice. */
+  consumedAt: Date | null;
+  consumedByAction: string | null;
   createdAt: Date;
 }
 
@@ -61,6 +64,8 @@ interface ApprovalRow {
   decided_by_staff_id: string | null;
   decided_at: Date | null;
   decision_note: string | null;
+  consumed_at: Date | null;
+  consumed_by_action: string | null;
   created_at: Date;
 }
 
@@ -79,6 +84,8 @@ function mapRow(r: ApprovalRow): Approval {
     decidedByStaffId: r.decided_by_staff_id,
     decidedAt: r.decided_at,
     decisionNote: r.decision_note,
+    consumedAt: r.consumed_at ?? null,
+    consumedByAction: r.consumed_by_action ?? null,
     createdAt: r.created_at,
   };
 }
@@ -102,7 +109,10 @@ async function loadApproval(db: Db, id: string, lock = false): Promise<Approval>
 
 /**
  * Verifies that an approval exists, is approved, is of the expected type and
- * has not already been used by another executed action of `consumerActionType`.
+ * has never been used, then marks it used by `consumerActionType`. Call it
+ * inside the transaction that performs the action: if the action fails the
+ * consumption rolls back with it; two concurrent uses cannot both succeed
+ * (row lock + `consumed_at is null`, also enforced by a database trigger).
  */
 export async function assertUsableApproval(
   db: Db,
@@ -124,8 +134,15 @@ export async function assertUsableApproval(
     `select id from agent_actions where approval_id = $1 and action_type = $2 and status = 'succeeded' limit 1`,
     [approvalId, consumerActionType],
   );
-  if (used) throw new ApprovalRequiredError("Approval has already been used", { approvalId });
-  return approval;
+  if (used || approval.consumedAt) throw new ApprovalRequiredError("Approval has already been used", { approvalId });
+  const consumed = await queryOne<ApprovalRow>(
+    db,
+    `update approvals set consumed_at = now(), consumed_by_action = $2
+      where id = $1 and status = 'approved' and consumed_at is null returning *`,
+    [approvalId, consumerActionType],
+  );
+  if (!consumed) throw new ApprovalRequiredError("Approval has already been used", { approvalId });
+  return mapRow(consumed);
 }
 
 export function createApprovalService(db: Db) {

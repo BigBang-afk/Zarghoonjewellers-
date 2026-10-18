@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createProductImportService } from "../../src/services/products/import/productImportService.js";
+import { createApprovalService } from "../../src/services/approvalService.js";
 import { createProductService } from "../../src/services/products/productService.js";
 import { ApprovalRequiredError, ForbiddenActionError, InvalidProductImportError } from "../../src/lib/errors.js";
 import { createTestDatabase, type TestDatabase } from "../helpers/testDb.js";
@@ -96,7 +97,23 @@ describe("apply", () => {
       importer.importProducts(csv, staffCtx(managerId), { dryRun: false, criticalChangesApprovalId: wrongType }),
     ).rejects.toBeInstanceOf(ApprovalRequiredError);
 
-    const approved = await insertApproval(t.db, { actionType: "price_change", status: "approved", deciderId: managerId });
+    // An approved price_change that does not name these exact changes is refused (step 12).
+    const unbound = await insertApproval(t.db, { actionType: "price_change", status: "approved", deciderId: managerId });
+    await expect(
+      importer.importProducts(csv, staffCtx(managerId), { dryRun: false, criticalChangesApprovalId: unbound }),
+    ).rejects.toThrow(/does not cover exactly/);
+
+    const request = await importer.requestCriticalChangesApproval(csv, staffCtx(managerId));
+    expect(request!.payload).toEqual({ kind: "product_import", changes: [{ sku: "ZJ-BR-001", field: "approved_price", from: "150000.00", to: "175000.00" }] });
+    const approved = (await createApprovalService(t.db).approve(request!.id, staffCtx(managerId))).id;
+
+    // The same approval cannot authorise a different price.
+    const different = `${HEADER}\nZJ-BR-001,Bridal Kundan Necklace,,,,195000,,\n`;
+    await expect(
+      importer.importProducts(different, staffCtx(managerId), { dryRun: false, criticalChangesApprovalId: approved }),
+    ).rejects.toThrow(/does not cover exactly/);
+    expect((await products.getProductBySku("ZJ-BR-001")).approvedPrice).toBe("150000.00");
+
     const report = await importer.importProducts(csv, staffCtx(managerId), { dryRun: false, criticalChangesApprovalId: approved });
     expect(report.criticalChangeSkus).toEqual(["ZJ-BR-001"]);
     expect((await products.getProductBySku("ZJ-BR-001")).approvedPrice).toBe("175000.00");

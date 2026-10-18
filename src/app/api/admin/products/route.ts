@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { randomUUID } from "crypto";
 import { auth } from "@/lib/auth";
+import { isCrossSiteRequest } from "@/lib/security/requestOrigin";
 import { prisma } from "@/lib/prisma";
 import { productSchema } from "@/lib/validations";
 
@@ -28,6 +29,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  if (isCrossSiteRequest(req)) {
+    return NextResponse.json({ error: "Request not allowed." }, { status: 403 });
+  }
   const session = await auth();
   if (session?.user?.role !== "ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

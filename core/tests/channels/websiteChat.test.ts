@@ -65,8 +65,14 @@ describe("configuration", () => {
     expect(resolveWebsiteChatConfig({ NODE_ENV: "development", ZARGHOON_CHAT_MODE: "staging" })).toMatchObject({ model: "none" });
   });
 
+  it("demo chat (fake products) never runs in a production build without an explicit opt-in (step 12)", () => {
+    expect(resolveWebsiteChatConfig({ NODE_ENV: "production", ZARGHOON_CHAT_MODE: "demo" })).toMatchObject({ mode: "demo", model: "none", unavailableReason: expect.stringMatching(/production/) });
+    expect(resolveWebsiteChatConfig({ NODE_ENV: "production", ZARGHOON_CHAT_MODE: "demo", ZARGHOON_ALLOW_DEMO_IN_PRODUCTION: "true" }).model).toBe("offline_demo");
+    expect(resolveWebsiteChatConfig({ NODE_ENV: "development", ZARGHOON_CHAT_MODE: "demo" }).model).toBe("offline_demo");
+  });
+
   it("never enables debug output in production", () => {
-    expect(resolveWebsiteChatConfig({ NODE_ENV: "production", ZARGHOON_CHAT_MODE: "demo", ZARGHOON_CHAT_DEBUG: "true" }).debug).toBe(false);
+    expect(resolveWebsiteChatConfig({ NODE_ENV: "production", ZARGHOON_CHAT_MODE: "demo", ZARGHOON_ALLOW_DEMO_IN_PRODUCTION: "true", ZARGHOON_CHAT_DEBUG: "true" }).debug).toBe(false);
   });
 
   it("14b. the runtime refuses to answer without a key in live mode", async () => {

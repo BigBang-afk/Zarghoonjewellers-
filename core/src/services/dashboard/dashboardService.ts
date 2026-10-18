@@ -2,6 +2,7 @@ import { z } from "zod";
 import { queryOne, type Db } from "../../database/db.js";
 import { ConversationNotFoundError, CustomerNotFoundError, LeadNotFoundError, ProductNotFoundError } from "../../lib/errors.js";
 import { sumMoney } from "../../lib/money.js";
+import { isValidTimeZone } from "../../lib/businessTime.js";
 import { parseInput, uuidSchema } from "../../lib/validation.js";
 import {
   LANGUAGES,
@@ -295,8 +296,10 @@ const followupBucketSchema = z.enum(["today", "overdue", "upcoming", "completed"
 export function createDashboardService(db: Db, options: { clock?: Clock; timezone?: string } = {}) {
   const clock = options.clock ?? systemClock;
   const tz = options.timezone ?? DEFAULT_TIMEZONE;
+  // The zone is written into SQL below, so only a real IANA name made of safe characters is accepted.
+  if (!/^[A-Za-z0-9_+\-/]{1,64}$/.test(tz) || !isValidTimeZone(tz)) throw new Error("Invalid business time zone");
   const customer360 = createCustomer360Service(db);
-  const startOfDay = (p: string) => `(date_trunc('day', ${p}::timestamptz at time zone '${tz.replace(/'/g, "")}') at time zone '${tz.replace(/'/g, "")}')`;
+  const startOfDay = (p: string) => `(date_trunc('day', ${p}::timestamptz at time zone '${tz}') at time zone '${tz}')`;
 
   async function count(sql: string, params: unknown[]): Promise<number> {
     return (await queryOne<{ n: number }>(db, sql, params))!.n;

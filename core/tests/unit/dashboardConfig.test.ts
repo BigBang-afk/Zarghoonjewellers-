@@ -22,6 +22,20 @@ describe("dashboard configuration", () => {
     ).toMatchObject({ mode: "connected", expectedEnvironment: "staging" });
   });
 
+  it("demo never activates in a production build unless explicitly allowed (step 12)", () => {
+    const demo = { ZARGHOON_DASHBOARD_MODE: "demo", ZARGHOON_DEMO_PASSWORD: "a-long-demo-pass-1" };
+    expect(resolveDashboardConfig({ ...demo, NODE_ENV: "production" })).toMatchObject({ mode: "unconfigured", problem: expect.stringMatching(/production/) });
+    expect(resolveDashboardConfig({ ...demo, NODE_ENV: "production", ZARGHOON_ALLOW_DEMO_IN_PRODUCTION: "yes" }).mode).toBe("unconfigured");
+    expect(resolveDashboardConfig({ ...demo, NODE_ENV: "production", ZARGHOON_ALLOW_DEMO_IN_PRODUCTION: "true" }).mode).toBe("demo");
+  });
+
+  it("rejects a business time zone that is not a valid IANA name (it is used in SQL)", () => {
+    const demo = { ZARGHOON_DASHBOARD_MODE: "demo", ZARGHOON_DEMO_PASSWORD: "a-long-demo-pass-1" };
+    expect(resolveDashboardConfig({ ...demo, ZARGHOON_BUSINESS_TIMEZONE: "Asia/Karachi'); drop table staff; --" }).problem).toMatch(/time zone/);
+    expect(resolveDashboardConfig({ ...demo, ZARGHOON_BUSINESS_TIMEZONE: "Mars/Olympus" }).problem).toMatch(/time zone/);
+    expect(resolveDashboardConfig({ ...demo, ZARGHOON_BUSINESS_TIMEZONE: "Europe/London" })).toMatchObject({ mode: "demo", timezone: "Europe/London" });
+  });
+
   it("secure cookies in production", () => {
     expect(resolveDashboardConfig({ NODE_ENV: "production" }).secureCookies).toBe(true);
   });

@@ -15,7 +15,7 @@ import { zodIssues } from "../../lib/validation.js";
  *  - "off":  the chat is disabled and the launcher is hidden.
  *
  * Defaults are safe: "demo" in development, "off" in production. Demo mode in
- * a production build must be requested explicitly.
+ * a production build also needs ZARGHOON_ALLOW_DEMO_IN_PRODUCTION=true.
  */
 
 const boolString = z
@@ -29,6 +29,7 @@ const envSchema = z.object({
   ZARGHOON_CORE_DATABASE_URL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ZARGHOON_CHAT_DEBUG: boolString,
+  ZARGHOON_ALLOW_DEMO_IN_PRODUCTION: boolString,
   ZARGHOON_CHAT_SESSION_PER_MINUTE: z.coerce.number().int().min(1).max(120).default(8),
   ZARGHOON_CHAT_SESSION_PER_DAY: z.coerce.number().int().min(1).max(5000).default(80),
   ZARGHOON_CHAT_IP_PER_MINUTE: z.coerce.number().int().min(1).max(600).default(20),
@@ -78,6 +79,9 @@ export function resolveWebsiteChatConfig(env: NodeJS.ProcessEnv): WebsiteChatCon
   } else if (mode === "staging") {
     if (!e.ZARGHOON_CORE_DATABASE_URL) unavailableReason = "ZARGHOON_CORE_DATABASE_URL is not set";
     else model = hasKey ? "claude" : "offline_demo";
+  } else if (production && !e.ZARGHOON_ALLOW_DEMO_IN_PRODUCTION) {
+    // Fake demo products must never reach real visitors by a stray setting.
+    unavailableReason = "Demo mode is disabled in production builds (ZARGHOON_ALLOW_DEMO_IN_PRODUCTION=true is required for a local preview)";
   } else {
     // Demo: use Claude when a key is present; otherwise a clearly labelled offline stand-in.
     model = hasKey ? "claude" : "offline_demo";

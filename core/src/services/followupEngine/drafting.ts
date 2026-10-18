@@ -105,6 +105,7 @@ const FORBIDDEN: [RegExp, string][] = [
   [/deliver(y|ed)? (by|within|on|in)\b|ship(ped|ping)? (by|within|on)\b|\bfree delivery\b|ڈیلیوری/i, "delivery_promise"],
   [/limited|only \d+ (left|piece)|last (one|piece)|few (left|pieces)|selling fast|hurry|act fast|before (it'?s|they'?re) gone|جلدی|محدود|sirf \d+/i, "urgency_or_scarcity"],
   [/guarantee|guaranteed|ضمانت/i, "guarantee"],
+  [/\b(payment|refund|order|booking|exchange)\b[^.?!\n]{0,40}\b(received|confirmed|processed|approved|shipped|dispatched|delivered|cancell?ed|reserved)\b/i, "transaction_claim"],
   [/https?:\/\/|www\.|@[a-z0-9-]+\.[a-z]/i, "contact_or_link"],
 ];
 const AVAILABILITY_CLAIM = /\b(in stock|is available|are available|available now|ready to (ship|deliver|collect)|stock mein|mojood|maujood|dastiyab)\b|موجود|دستیاب/i;

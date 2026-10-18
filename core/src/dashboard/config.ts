@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ENVIRONMENTS, type DbEnvironment } from "../database/migrator.js";
 import { passwordSchema } from "../services/staffAuth/staffAuthService.js";
+import { isValidTimeZone } from "../lib/businessTime.js";
 
 /**
  * Management dashboard configuration (server-side environment only).
@@ -44,7 +45,15 @@ export function resolveDashboardConfig(env: NodeJS.ProcessEnv): DashboardConfig 
   const mode = env.ZARGHOON_DASHBOARD_MODE?.trim();
 
   if (!mode) return off("ZARGHOON_DASHBOARD_MODE is not set (use \"demo\" or \"connected\")");
+  if (!isValidTimeZone(base.timezone) || !/^[A-Za-z0-9_+\-/]{1,64}$/.test(base.timezone)) {
+    return off("ZARGHOON_BUSINESS_TIMEZONE is not a valid IANA time zone (e.g. Asia/Karachi)");
+  }
   if (mode === "demo") {
+    // A production build must never come up with fake data by accident; a local
+    // production-build preview has to opt in explicitly.
+    if (env.NODE_ENV === "production" && env.ZARGHOON_ALLOW_DEMO_IN_PRODUCTION !== "true") {
+      return off("Demo mode is disabled in production builds (set ZARGHOON_ALLOW_DEMO_IN_PRODUCTION=true only for a local preview)");
+    }
     const password = passwordSchema.safeParse(env.ZARGHOON_DEMO_PASSWORD ?? "");
     if (!password.success) {
       return off("Demo mode needs ZARGHOON_DEMO_PASSWORD (at least 12 characters with letters and numbers)");

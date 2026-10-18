@@ -185,12 +185,31 @@ Approvals remain human-only.
 5. **Internal data.** The reply mentions scores, lead status or similar.
 6. **Too many emojis.** More than 2.
 7. **Low confidence without handoff.** `confidence: "low"` without a handoff.
+8. **A customer's figure stated as a price.** A number that only the customer
+   said (for example "your website says 300,000") may be repeated back as their
+   budget, but never confirmed as a price.
+9. **Claims no tool can back.** For example "payment received", "order
+   confirmed or shipped", "will be delivered tomorrow", "discount applied or
+   approved", "refund processed" or "the gold rate is stable", including the
+   Roman Urdu equivalents. The agent has no payment, order, delivery,
+   discount or gold-rate tool. Negated or conditional clauses are not claims,
+   for example "once your payment is confirmed…".
+
+Grounding uses **verified facts only**:
+
+- this turn's tool results
+- the stored profile
+- staff messages
+
+Earlier AI replies do not count, because they may be stale: a price quoted
+yesterday must be looked up again today. The customer's own words count only
+as the customer's.
 
 A rejected reply goes back to the model as a tool error listing the
 problems. It is never stored. After `maxReplyCorrections` the turn fails
 safe.
 
-Known limit: free-text claims without numbers, such as a made-up street
+Known limit: some free-text claims without numbers, such as a made-up street
 name or "it's available" said without a product reference, can't be fully
 verified mechanically. They are covered by the prompt, by the requirement
 that store facts come from `get_business_info`, and by the availability rule

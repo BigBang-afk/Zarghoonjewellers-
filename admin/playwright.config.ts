@@ -25,6 +25,6 @@ export default defineConfig({
     reuseExistingServer: true,
     timeout: 180_000,
     // The suite signs in dozens of times a minute from one address.
-    env: { ZARGHOON_DASHBOARD_MODE: "demo", ZARGHOON_DEMO_PASSWORD: password, ZARGHOON_DASHBOARD_LOGINS_PER_MINUTE: "500", ZARGHOON_DASHBOARD_LOGINS_PER_HOUR: "1000" },
+    env: { ZARGHOON_DASHBOARD_MODE: "demo", ZARGHOON_DEMO_PASSWORD: password, ZARGHOON_ALLOW_DEMO_IN_PRODUCTION: "true", ZARGHOON_DASHBOARD_LOGINS_PER_MINUTE: "500", ZARGHOON_DASHBOARD_LOGINS_PER_HOUR: "1000" },
   },
 });

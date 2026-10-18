@@ -4,7 +4,7 @@ import { decimalEquals } from "../../../lib/money.js";
 import { mapProductRow, stockConsistencyError, type Product, type ProductRow } from "../../../schemas/product.js";
 import type { ActionContext } from "../../../types/context.js";
 import { recordAction } from "../../auditService.js";
-import { assertUsableApproval } from "../../approvalService.js";
+import { assertUsableApproval, createApprovalService } from "../../approvalService.js";
 import { APPROVER_ROLES, requireStaffActor } from "../../staffRules.js";
 import { parseProductCsv, type ImportIssue } from "./parseCsv.js";
 import { validateImportRows, type ProductImportRecord } from "./validateRows.js";
@@ -234,6 +234,20 @@ async function updateProduct(db: Db, sku: string, changes: FieldChange[]): Promi
   await db.query(`update products set ${sets.join(", ")} where sku = $1`, [sku, ...changes.map((c) => c.to)]);
 }
 
+/** The exact critical overwrites in a plan, in a stable order — what an approval must cover. */
+function criticalChangeList(report: ImportReport): { sku: string; field: string; from: string | null; to: string | null }[] {
+  const text = (v: unknown) => (v === null || v === undefined ? null : String(v));
+  return report.items
+    .flatMap((i) => i.changes.filter((c) => c.critical).map((c) => ({ sku: i.sku, field: c.field, from: text(c.from), to: text(c.to) })))
+    .sort((a, b) => (a.sku + a.field).localeCompare(b.sku + b.field));
+}
+
+/** Order-independent of object keys (jsonb reorders them). */
+function changeKey(changes: unknown): string {
+  if (!Array.isArray(changes)) return "invalid";
+  return JSON.stringify(changes.map((c: Record<string, unknown>) => [c?.sku, c?.field, c?.from, c?.to]));
+}
+
 export function createProductImportService(db: Db) {
   /** Validates and compares against the database. Never writes. */
   async function planImport(csvText: string, options: Pick<ProductImportOptions, "allowTestSkus"> = {}) {
@@ -272,7 +286,15 @@ export function createProductImportService(db: Db) {
             skus: report.criticalChangeSkus,
           });
         }
-        await assertUsableApproval(tx, options.criticalChangesApprovalId, "price_change", "product_import");
+        const approval = await assertUsableApproval(tx, options.criticalChangesApprovalId, "price_change", "product_import");
+        // The approval must name exactly these overwrites (same products, fields, old and new
+        // values) — an approval for one price can never authorise a different one.
+        if (approval.payload.kind !== "product_import" || changeKey(approval.payload.changes) !== changeKey(criticalChangeList(report))) {
+          throw new ApprovalRequiredError("This approval does not cover exactly these product changes; request a new approval for this file", {
+            approvalId: options.criticalChangesApprovalId,
+            skus: report.criticalChangeSkus,
+          });
+        }
         approvalId = options.criticalChangesApprovalId;
       }
 
@@ -294,7 +316,28 @@ export function createProductImportService(db: Db) {
     });
   }
 
-  return { planImport, importProducts };
+  /**
+   * Asks an owner/manager to approve the critical overwrites in this file. The
+   * request lists every changed value; only that exact set can be applied with it.
+   */
+  async function requestCriticalChangesApproval(csvText: string, ctx: ActionContext, options: Pick<ProductImportOptions, "allowTestSkus"> = {}) {
+    const report = await planImport(csvText, options);
+    if (!report.valid) {
+      throw new InvalidProductImportError(`Import rejected: ${report.issues.length} issue(s) found`, { issues: report.issues });
+    }
+    const changes = criticalChangeList(report);
+    if (changes.length === 0) return null;
+    return createApprovalService(db).createApprovalRequest(
+      {
+        actionType: "price_change",
+        reason: `Product import overwrites ${changes.length} stored price/weight/karat value(s) on ${report.criticalChangeSkus.length} product(s)`,
+        payload: { kind: "product_import", changes },
+      },
+      ctx,
+    );
+  }
+
+  return { planImport, importProducts, requestCriticalChangesApproval };
 }
 
 export type ProductImportService = ReturnType<typeof createProductImportService>;

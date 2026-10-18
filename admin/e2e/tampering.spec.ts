@@ -27,3 +27,12 @@ test("a tampered follow-up id is refused on the server", async ({ page }) => {
   await page.goto("/followups?tab=overdue");
   await expect(page.getByTestId("followup-item")).toHaveCount(1);
 });
+
+test("the public health check says only up or down", async ({ request }) => {
+  const res = await request.get("/api/health", { maxRedirects: 0 });
+  expect(res.status()).toBe(200);
+  expect(await res.json()).toEqual({ status: "ok" });
+  // Everything else under /api still requires a session.
+  const other = await request.get("/api/anything", { maxRedirects: 0 });
+  expect(other.status()).toBe(307);
+});

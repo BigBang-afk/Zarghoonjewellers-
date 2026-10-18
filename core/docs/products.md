@@ -73,5 +73,10 @@ CLI:
 ```bash
 npm run products:import -- --file data/products.sample.csv                    # dry run
 npm run products:import -- --file products.csv --apply --staff-id <uuid>      # apply
+npm run products:import -- --file products.csv --request-approval --staff-id <uuid>   # asks approval for exactly these overwrites
 npm run products:import -- --file products.csv --apply --staff-id <uuid> --approval-id <uuid>
 ```
+
+The approval request lists every overwritten value (SKU, field, old value and
+new value). Apply is refused unless the file still produces exactly that list.
+An approval for one price can never authorise a different one.
